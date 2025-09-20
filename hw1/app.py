@@ -48,17 +48,23 @@ async def factorial_handler(
 
     if raw_n is None:
         return await _send_json(
-            send, HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "missing 'n' param"}
+            send,
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            {"error": "missing 'n' param"}
         )
     try:
         n = int(raw_n)
         result = factorial(n)
     except ValueError:
         return await _send_json(
-            send, HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "param must be integer"}
+            send,
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            {"error": "param must be integer"}
         )
     except NegativeParameterError as e:
-        return await _send_json(send, HTTPStatus.BAD_REQUEST, {"error": str(e)})
+        return await _send_json(send,
+                                HTTPStatus.BAD_REQUEST,
+                                {"error": str(e)})
 
     return await _send_json(send, HTTPStatus.OK, {"result": result})
 
@@ -81,7 +87,9 @@ async def fibonacci_handler(
     raw_n = parts[1] if len(parts) > 1 else None
     if raw_n is None:
         return await _send_json(
-            send, HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "missing param in path"}
+            send,
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            {"error": "missing param in path"}
         )
 
     try:
@@ -132,11 +140,15 @@ async def mean_handler(
 
     if not isinstance(data, list):
         return await _send_json(
-            send, HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "body must be list"}
+            send,
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            {"error": "body must be list"}
         )
 
     if not data:
-        return await _send_json(send, HTTPStatus.BAD_REQUEST, {"error": "empty list"})
+        return await _send_json(send,
+                                HTTPStatus.BAD_REQUEST,
+                                {"error": "empty list"})
 
     if not all(isinstance(x, (int, float)) for x in data):
         return await _send_json(
