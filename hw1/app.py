@@ -127,9 +127,9 @@ async def not_found_handler(
 
 
 async def handle_lifespan(
-        scope: dict[str, Any],
-        receive: Callable[[], Awaitable[dict[str, Any]]],
-        send: Callable[[dict[str, Any]], Awaitable[None]],
+    scope: dict[str, Any],
+    receive: Callable[[], Awaitable[dict[str, Any]]],
+    send: Callable[[dict[str, Any]], Awaitable[None]],
 ) -> None:
     while True:
         message = await receive()
