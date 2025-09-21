@@ -7,7 +7,7 @@ on:
     paths: [ 'hw1/**' ]
   push:
     branches: [ main ]
-    paths: [ 'hw1/**' ]
+    # paths: [ 'hw1/**' ]
 
 jobs:
   test-hw1:
