@@ -66,6 +66,7 @@ async def application(
         send: Корутина для отправки сообщений клиенту
     """
     # TODO: Ваша реализация здесь
+
     scope_type = scope.get("type")
 
 
