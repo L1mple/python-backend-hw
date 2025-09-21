@@ -19,7 +19,6 @@ def fibonacci(n: int) -> int:
 
 
 def mean(numbers: list[int]) -> float:
-    print(numbers, "numbers")
     if not numbers:
         raise ValueError("Empty list")
     return sum(numbers) / len(numbers)
@@ -91,10 +90,8 @@ async def application(
         while True:
             message = await receive()
             if message['type'] == 'lifespan.startup':
-                print("Application is starting up...")
                 await send({'type': 'lifespan.startup.complete'})
             elif message['type'] == 'lifespan.shutdown':
-                print("Application is shutting down...")
                 await send({'type': 'lifespan.shutdown.complete'})
                 return
 
