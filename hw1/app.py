@@ -118,7 +118,7 @@ async def application(
         send: Корутина для отправки сообщений клиенту
     """
 
-    if scope['type'] == 'lifespan':
+    if scope["type"] == 'lifespan':
         while True:
             body_dict = await receive()
             if body_dict['type'] == 'lifespan.startup':
