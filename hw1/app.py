@@ -89,8 +89,8 @@ async def application(
         return
 
     if scope["path"] == "/mean":
-        data_body = await receive()
-        body_str = data_body["body"].decode()
+        body = await receive()
+        body_str = body["body"].decode()
         if not body_str:
             await send_error(send, http.client.UNPROCESSABLE_ENTITY)
             return
