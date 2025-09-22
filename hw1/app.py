@@ -36,10 +36,10 @@ def bad_request_response(value = ""):
         'code': HTTPStatus.BAD_REQUEST
     }
 
-def unprocessable_content_response(value = ""):
+def unprocessable_entity_response(value = ""):
     return {
         'value': str(value),
-        'code': HTTPStatus.UNPROCESSABLE_CONTENT
+        'code': HTTPStatus.UNPROCESSABLE_ENTITY
     }
 
 def ok_response(value = ""):
@@ -92,7 +92,7 @@ def route_request(scope: dict[str, Any]) -> Callable:
         elif path.startswith("/mean"): 
             function = get_mean
             routing_params = path[6:].split("/")
-            
+
     return [function, routing_params]
     
 
@@ -108,7 +108,7 @@ async def handle_http(scope: dict[str, Any], receive: Callable, send: Callable):
             query_params = parse_query_string(scope)
             response = function(query_params, path_parameters, body)
         except Exception:
-            response = unprocessable_content_response()
+            response = unprocessable_entity_response()
 
     code = response['code']
     body = json.dumps({"result": response['value']})
