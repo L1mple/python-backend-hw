@@ -8,7 +8,7 @@ async def fibonacci_endpoint(scope: Scope, receive: Receive, send: Send, value: 
         await send_error_response(send, status=HTTPStatus.BAD_REQUEST)
     elif value.isdigit():
         response = str(calculate_fibonacci(int(value)))
-        await send_ok_response(send, response.encode())
+        await send_ok_response(send, response)
     else:
         await send_error_response(send, status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
@@ -18,7 +18,7 @@ async def factorial_endpoint(scope: Scope, receive: Receive, send: Send, value: 
         await send_error_response(send, status=HTTPStatus.BAD_REQUEST)
     elif len(value) and value[0].isdigit():
         response = str(calculate_factorial(int(value[0])))
-        await send_ok_response(send, response.encode())
+        await send_ok_response(send, response)
     else:
         await send_error_response(send, status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
@@ -26,18 +26,18 @@ async def factorial_endpoint(scope: Scope, receive: Receive, send: Send, value: 
 async def mean_endpoint(scope: Scope, receive: Receive, send: Send, value: str):
     try:
         parsed = json.loads(value)
+
+        if not len(parsed) or not all(isinstance(x, (int, float)) for x in parsed):
+            await send_error_response(send, status=HTTPStatus.BAD_REQUEST)
+        else:
+            response = str(calculate_mean(parsed))
+            await send_ok_response(send, response)
     except (json.JSONDecodeError, TypeError):
         await send_error_response(send, status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
-    if not all(isinstance(x, (int, float)) for x in parsed):
-        await send_error_response(send, status=HTTPStatus.BAD_REQUEST)
-
-    response = str(calculate_mean(parsed))
-    await send_ok_response(send, response.encode())
-
-
-async def send_ok_response(send: Send, response: bytes):
-    await send_message(send=send, status=HTTPStatus.OK, body=response)
+async def send_ok_response(send: Send, response: str):
+    json_response = json.dumps({"result": response}, ensure_ascii=False, indent=2).encode("utf-8")
+    await send_message(send=send, status=HTTPStatus.OK, body=json_response)
 
 
 async def send_error_response(send: Send, status=HTTPStatus.NOT_FOUND):
@@ -48,6 +48,9 @@ async def send_message(send: Send, status: HTTPStatus, body: bytes):
     response_message = {
         "type": "http.response.start",
         "status": status,
+        "headers": [
+            [b"content-type", b"text/plain" if status == HTTPStatus.OK else b"application/json; charset=utf-8"]
+        ],
     }
     print("Sending response start:", response_message)
     await send(response_message)
