@@ -52,7 +52,6 @@ async def handle_factorial(scope, send):
     result = math.factorial(n)
     await send_json_response(send, 200, {"result": result})
 
-
 async def handle_fibonacci(scope, send):
     path_parts = scope["path"].strip("/").split("/")
 
