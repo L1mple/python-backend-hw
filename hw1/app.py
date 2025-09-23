@@ -8,26 +8,27 @@ async def application(
     receive: Callable[[], Awaitable[dict[str, Any]]],
     send: Callable[[dict[str, Any]], Awaitable[None]],
 ):
-    """
-    Args:
-        scope: Словарь с информацией о запросе
-        receive: Корутина для получения сообщений от клиента
-        send: Корутина для отправки сообщений клиенту
-    """
-    if scope["type"] != "http":
-        return
-    
-    path = scope["path"]
-    method = scope["method"]
+    if scope["type"] == "lifespan":
+        while True:
+            message = await receive()
+            if message["type"] == "lifespan.startup":
+                await send({"type": "lifespan.startup.complete"})
+            elif message["type"] == "lifespan.shutdown":
+                await send({"type": "lifespan.shutdown.complete"})
+                return
 
-    if path == "/factorial" and method == "GET":
-        await handle_factorial(scope, send)
-    elif path.startswith("/fibonacci/") and method == "GET":
-        await handle_fibonacci(scope, send)
-    elif path == "/mean" and method == "POST":
-        await handle_mean(receive, send)
-    else:
-        await send_error(send, 404, "404 Not Found")
+    elif scope["type"] == "http":
+        path = scope["path"]
+        method = scope["method"]
+
+        if path == "/factorial" and method == "GET":
+            await handle_factorial(scope, send)
+        elif path.startswith("/fibonacci/") and method == "GET":
+            await handle_fibonacci(scope, send)
+        elif path == "/mean" and method == "POST":
+            await handle_mean(receive, send)
+        else:
+            await send_error(send, 404, "Not Found")
 
 async def handle_factorial(scope, send):
     qs = parse_qs(scope["query_string"].decode("utf-8"))
@@ -40,8 +41,8 @@ async def handle_factorial(scope, send):
 
     try:
         n = int(n_str)
-    except ValueError:
-        await send_error(send, 422, "Parameter must 'n' be an integer")
+    except (ValueError, TypeError):
+        await send_error(send, 422, "Parameter 'n' must be an integer")
         return
 
     if n < 0:
@@ -71,6 +72,10 @@ async def handle_fibonacci(scope, send):
         await send_error(send, 400, "Fibonacci is not defined for negative numbers")
         return
     
+    if n <= 1:
+        await send_json_response(send, 200, {"result": n})
+        return
+
     a, b = 0, 1
     for _ in range(2, n):
         a, b = b, a + b
