@@ -25,7 +25,7 @@ async def application(
             await handle_factorial(scope, send)
         elif path.startswith("/fibonacci/") and method == "GET":
             await handle_fibonacci(scope, send)
-        elif path == "/mean" and method == "POST":
+        elif path == "/mean" and method == "GET":
             await handle_mean(receive, send)
         else:
             await send_error(send, 404, "Not Found")
