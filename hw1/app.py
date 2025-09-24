@@ -11,9 +11,14 @@ async def application(
 ):
     """
     ASGI-приложение с поддержкой:
-    /factorial?n=5
-    /fibonacci/10
-    /mean?numbers=1,2,3
+        /factorial?n=5
+        /fibonacci/10
+        /mean?numbers=1,2,3
+    
+    Args:
+        scope: Словарь с информацией о запросе
+        receive: Корутина для получения сообщений от клиента
+        send: Корутина для отправки сообщений клиенту
     """
 
     if scope["type"] != "http":
