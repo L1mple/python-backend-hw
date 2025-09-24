@@ -22,110 +22,159 @@ async def application(
     """
 
     if scope["type"] == "lifespan":
-        while True:
-            message = await receive()
-            if message["type"] == "lifespan.startup":
-                await send({"type": "lifespan.startup.complete"})
-            elif message["type"] == "lifespan.shutdown":
-                await send({"type": "lifespan.shutdown.complete"})
-                return
-
+        await handle_lifespan(scope, receive, send)
+        return
+        
     if scope["type"] != "http":
         return
+        
+    await handle_http_request(scope, receive, send)
 
+
+async def handle_lifespan(scope, receive, send):
+    """Обработка событий жизненного цикла приложения"""
+    while True:
+        message = await receive()
+        if message["type"] == "lifespan.startup":
+            await send({"type": "lifespan.startup.complete"})
+        elif message["type"] == "lifespan.shutdown":
+            await send({"type": "lifespan.shutdown.complete"})
+            return
+            
+
+async def handle_http_request(scope, receive, send):
+    """Обработка HTTP запроса"""
     method = scope["method"]
     path = scope["path"]
     query_string = scope["query_string"].decode()
 
-    status = 200
+    status, result = await process_route(path, query_string, receive)
+    
     headers = [(b"content-type", b"application/json")]
+    response_body = json.dumps(result).encode()
+
+    await send({
+        "type": "http.response.start", 
+        "status": status, 
+        "headers": headers
+    })
+    await send({
+        "type": "http.response.body", 
+        "body": response_body
+    })
+
+
+async def process_route(path: str, query_string: str, receive) -> tuple[int, dict]:
+
+    status = 200
     result: dict[str, Any] = {}
 
     try:
-        if path == "/factorial":         
-            params = parse_qs(query_string)
-            
-            if "n" not in params or params["n"][0] == "":
-                status = 422
-                raise ValueError("Missing parameter 'n' or empty")
-                
-            try:
-                n = int(params["n"][0])
-            except ValueError:
-                status = 422
-                raise ValueError("Parameter 'n' must be an integer")
-                
-            if n < 0:
-                status = 400
-                raise ValueError("n must be >= 0")
-
-            result["result"] = get_factorial(n)
+        if path == "/factorial":
+            return await handler_factorial(query_string)
         
         elif path.startswith("/fibonacci/"):
-            match = re.fullmatch(r"/fibonacci/(-?\d+)", path)
-
-            if not match:
-                status = 422
-                raise ValueError("Missing parameter 'n' or value is not a numerical value")
-                
-            n = int(match.group(1))
-        
-            if n < 0:
-                status = 400
-                raise ValueError("n must be >= 0")
-
-            result["result"] = get_fibonacci(n)
+            return await handler_fibonacci(path)
 
         elif path == "/mean":
-            data = None
-            message = await receive()
-            body_bytes = message.get("body", b"")
-            print(body_bytes)
-            if not body_bytes:
-                params = parse_qs(query_string)
-                if "numbers" in params or params["numbers"][0]:
-                    try:
-                        numbers_str = params["numbers"][0]
-                        data = [float(x.strip()) for x in numbers_str.split(",")]
-                    except ValueError:
-                        status = 422
-                        raise ValueError("Parameter 'numbers' must be comma-separated numbers")
-                else:
-                    status = 422
-                    raise ValueError("Missing request body or numbers parameter")                        
-                status = 422
-                raise ValueError("Missing request body or numbers parameter")
-            else: 
-                try:
-                    data = json.loads(body_bytes)
-                except json.JSONDecodeError:
-                    status = 422
-                    raise ValueError("Request body must be a valid JSON")
-
-            if not isinstance(data, list):
-                status = 422
-                raise ValueError("Data must be a list")
-        
-            if not data:
-                status = 400
-                raise ValueError("List is empty")
-            
-            if not all(isinstance(x, (int, float)) for x in data):
-                status = 400
-                raise ValueError("List must contain only numbers")
-        
-            result["result"] = get_mean(data)
+            return await handler_mean(receive, query_string)
 
         else:
             status = 404
             result = {"error": "Unknown path"}
-
+    except ValueError as e:
+            status = getattr(e, 'status_code', 400)
+            return status, {"error": str(e)}
     except Exception as e:
         result = {"error": f"Error: {e}"}
 
-    # Отправка ответа
-    await send({"type": "http.response.start", "status": status, "headers": headers})
-    await send({"type": "http.response.body", "body": json.dumps(result).encode()})
+    return status, result
+
+
+async def handler_factorial(query_string):
+    params = parse_qs(query_string)
+    
+    if "n" not in params or params["n"][0] == "":
+        error = ValueError("Missing parameter 'n'")
+        error.status_code = 422
+        raise error
+        
+    try:
+        n = int(params["n"][0])
+    except ValueError:
+        error = ValueError("Parameter 'n' must be an integer")
+        error.status_code = 422
+        raise error
+        
+    if n < 0:
+        error = ValueError("n must be >= 0")
+        error.status_code = 400
+        raise error
+
+    return 200, {"result": get_factorial(n)}
+
+
+async def handler_fibonacci(path):
+    match = re.fullmatch(r"/fibonacci/(-?\d+)", path)
+    if not match:
+        error = ValueError("Missing parameter 'n' or value is not a numerical value")
+        error.status_code = 422
+        raise error
+        
+    n = int(match.group(1))
+
+    if n < 0:
+        error = ValueError("n must be >= 0")
+        error.status_code = 400
+        raise error
+
+    return 200, {"result": get_fibonacci(n)}
+
+    
+async def handler_mean(receive, query_string):
+    data = None
+    message = await receive()
+    body_bytes = message.get("body", b"")
+
+    if not body_bytes:
+        params = parse_qs(query_string)
+        if "numbers" in params or params["numbers"][0]:
+            try:
+                numbers_str = params["numbers"][0]
+                data = [float(x.strip()) for x in numbers_str.split(",")]
+            except ValueError:
+                error = ValueError("Parameter 'numbers' must be comma-separated numbers")
+                error.status_code = 422
+                raise error
+        else:
+            error = ValueError("Missing request body or numbers parameter")
+            error.status_code = 422
+            raise error
+            
+    else: 
+        try:
+            data = json.loads(body_bytes)
+        except json.JSONDecodeError:
+            error = ValueError("Request body must be a valid JSON")
+            error.status_code = 422
+            raise error
+
+    if not isinstance(data, list):
+        error = ValueError("Data must be a list")
+        error.status_code = 422
+        raise error
+
+    if not data:
+        error = ValueError("List is empty")
+        error.status_code = 400
+        raise error
+    
+    if not all(isinstance(x, (int, float)) for x in data):
+        error = ValueError("List must contain only numbers")
+        error.status_code = 400
+        raise error
+
+    return 200, {"result": get_mean(data)}
 
 
 def get_factorial(n: int) -> int:
