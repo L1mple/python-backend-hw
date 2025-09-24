@@ -73,28 +73,40 @@ async def application(
 
             # ---------- /mean ----------
             elif path == "/mean":
-                # Читаем тело (даже если GET)
-                body_bytes = b""
-                more_body = True
-                while more_body:
-                    message = await receive()
-                    body_bytes += message.get("body", b"")
-                    more_body = message.get("more_body", False)
+                numbers = None
 
-                if not body_bytes:
-                    status = HTTPStatus.UNPROCESSABLE_ENTITY
-                    raise ValueError("Missing body")
+                # 1. Пробуем из query (?numbers=1,2,3)
+                if "numbers" in query:
+                    try:
+                        numbers = [
+                            float(v) for v in query["numbers"][0].split(",") if v.strip()
+                        ]
+                    except Exception:
+                        status = HTTPStatus.UNPROCESSABLE_ENTITY
+                        raise ValueError("Invalid numbers in query")
 
-                try:
-                    data = json.loads(body_bytes.decode())
-                except Exception:
-                    status = HTTPStatus.UNPROCESSABLE_ENTITY
-                    raise ValueError("Invalid JSON")
-
-                numbers = data if isinstance(data, list) else data.get("numbers")
+                # 2. Если в query нет, читаем body (JSON)
                 if numbers is None:
-                    status = HTTPStatus.UNPROCESSABLE_ENTITY
-                    raise ValueError("Missing values")
+                    body_bytes = b""
+                    more_body = True
+                    while more_body:
+                        message = await receive()
+                        body_bytes += message.get("body", b"")
+                        more_body = message.get("more_body", False)
+
+                    if not body_bytes:
+                        status = HTTPStatus.UNPROCESSABLE_ENTITY
+                        raise ValueError("Missing body")
+
+                    try:
+                        data = json.loads(body_bytes.decode())
+                    except Exception:
+                        status = HTTPStatus.UNPROCESSABLE_ENTITY
+                        raise ValueError("Invalid JSON")
+
+                    numbers = data if isinstance(data, list) else data.get("numbers")
+
+                # Валидации
                 if not isinstance(numbers, list) or not all(
                     isinstance(v, (int, float)) for v in numbers
                 ):
