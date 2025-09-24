@@ -1,6 +1,8 @@
 from typing import Any, Awaitable, Callable
 import urllib.parse
 import math
+import json
+from http import HTTPStatus
 
 async def application(
     scope: dict[str, Any],
@@ -16,61 +18,113 @@ async def application(
     
     #assert scope["type"] == "http"
 
-    path = scope["path"]
-    query = urllib.parse.parse_qs(scope["query_string"].decode())
+    if scope["type"] == "lifespan":
+        # Ждём события запуска/остановки
+        while True:
+            message = await receive()
+            if message["type"] == "lifespan.startup":
+                await send({"type": "lifespan.startup.complete"})
+            elif message["type"] == "lifespan.shutdown":
+                await send({"type": "lifespan.shutdown.complete"})
+                return
 
-    status = 200
-    body = b""
-    try:
-        if path == "/factorial":
-            n = int(query.get("n", [0])[0])
-            if n < 0:
-                raise ValueError("n must be >= 0")
-            result = math.factorial(n)
-            body = str(result).encode()
+    elif scope["type"] == "http":
+        method = scope["method"]
+        path = scope["path"]
+        query = urllib.parse.parse_qs(scope["query_string"].decode())
 
-        elif path.startswith("/fibonacci"):
-            parts = path.strip("/").split("/")
-            if len(parts) == 2:  # /fibonacci/<n>
+        status = HTTPStatus.OK
+        response: dict[str, Any] = {}
+
+        try:
+            # ---------- /factorial?n=5 ----------
+            if path == "/factorial":
+                if "n" not in query or query["n"][0] == "":
+                    status = HTTPStatus.UNPROCESSABLE_ENTITY
+                    raise ValueError("Missing n")
                 try:
-                    n = int(parts[1])
+                    n = int(query["n"][0])
                 except ValueError:
-                    raise ValueError("n must be an integer")
+                    status = HTTPStatus.UNPROCESSABLE_ENTITY
+                    raise ValueError("Invalid n")
+                if n < 0:
+                    status = HTTPStatus.BAD_REQUEST
+                    raise ValueError("n must be >= 0")
+                response = {"result": math.factorial(n)}
+
+            # ---------- /fibonacci/{n} ----------
+            elif path.startswith("/fibonacci"):
+                parts = path.split("/")
+                if len(parts) != 3 or not parts[2]:
+                    status = HTTPStatus.UNPROCESSABLE_ENTITY
+                    raise ValueError("Missing n in path")
+                try:
+                    n = int(parts[2])
+                except ValueError:
+                    status = HTTPStatus.UNPROCESSABLE_ENTITY
+                    raise ValueError("Invalid path parameter")
+                if n < 0:
+                    status = HTTPStatus.BAD_REQUEST
+                    raise ValueError("n must be >= 0")
+                fib = [0, 1]
+                for _ in range(2, n):
+                    fib.append(fib[-1] + fib[-2])
+                response = {"result": fib[:n]}
+
+            # ---------- /mean ----------
+            elif path == "/mean":
+                # Читаем тело (даже если GET)
+                body_bytes = b""
+                more_body = True
+                while more_body:
+                    message = await receive()
+                    body_bytes += message.get("body", b"")
+                    more_body = message.get("more_body", False)
+
+                if not body_bytes:
+                    status = HTTPStatus.UNPROCESSABLE_ENTITY
+                    raise ValueError("Missing body")
+
+                try:
+                    data = json.loads(body_bytes.decode())
+                except Exception:
+                    status = HTTPStatus.UNPROCESSABLE_ENTITY
+                    raise ValueError("Invalid JSON")
+
+                numbers = data if isinstance(data, list) else data.get("numbers")
+                if numbers is None:
+                    status = HTTPStatus.UNPROCESSABLE_ENTITY
+                    raise ValueError("Missing values")
+                if not isinstance(numbers, list) or not all(
+                    isinstance(v, (int, float)) for v in numbers
+                ):
+                    status = HTTPStatus.BAD_REQUEST
+                    raise ValueError("numbers must be a list of numbers")
+                if not numbers:
+                    status = HTTPStatus.BAD_REQUEST
+                    raise ValueError("No values provided")
+
+                result = sum(numbers) / len(numbers)
+                response = {"result": result}
+
             else:
-                # fallback to query string: /fibonacci?n=10
-                n = int(query.get("n", [0])[0])
+                status = HTTPStatus.NOT_FOUND
+                response = {"error": "Not found"}
 
-            if n < 0:
-                raise ValueError("n must be >= 0")
-            fib = [0, 1]
-            for _ in range(2, n):
-                fib.append(fib[-1] + fib[-2])
-            body = str(fib[:n]).encode()
+        except Exception as e:
+            if not response:
+                response = {"error": str(e)}
 
-        elif path == "/mean":
-            numbers_str = query.get("numbers", [""])[0]
-            numbers = [float(v) for v in numbers_str.split(",") if v.strip()]
-            if not numbers:
-                raise ValueError("No numbers provided")
-            result = sum(numbers) / len(numbers)
-            body = str(result).encode()
+        body = json.dumps(response).encode()
 
-        else:
-            status = 404
-            body = b"Not found"
-
-    except Exception as e:
-        status = 400
-        body = f"Error: {str(e)}".encode()
-
-    await send(
-        {
-            "type": "http.response.start",
-            "status": status,
-            "headers": [(b"content-type", b"text/plain")],
-        }
-    )
-    await send({"type": "http.response.body", "body": body})
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status,
+                "headers": [(b"content-type", b"application/json")],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
 
 if __name__ == "__main__":
     import uvicorn
