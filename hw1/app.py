@@ -23,7 +23,7 @@ async def application(
     path: str = scope.get("path", "")
     method: str = scope.get("method", "GET")
 
-    # Разрешаем только GET на известных ручках
+    #Разрешаем только GET на известных ручках
     if method != "GET":
         await send_json(404, {"detail": "Not Found"})
         return
