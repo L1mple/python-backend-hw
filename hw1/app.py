@@ -21,6 +21,15 @@ async def application(
         send: Корутина для отправки сообщений клиенту
     """
 
+    if scope["type"] == "lifespan":
+        while True:
+            message = await receive()
+            if message["type"] == "lifespan.startup":
+                await send({"type": "lifespan.startup.complete"})
+            elif message["type"] == "lifespan.shutdown":
+                await send({"type": "lifespan.shutdown.complete"})
+                return
+
     if scope["type"] != "http":
         return
 
@@ -52,7 +61,7 @@ async def application(
 
             result["result"] = get_factorial(n)
         
-        elif "/fibonacci" in path:
+        elif path.startswith("/fibonacci/"):
             match = re.fullmatch(r"/fibonacci/(-?\d+)", path)
 
             if not match:
@@ -68,30 +77,35 @@ async def application(
             result["result"] = get_fibonacci(n)
 
         elif path == "/mean":
-            params = parse_qs(query_string)
             data = None
-            
-            if "numbers" in params or params["numbers"][0]:
-                try:
-                    numbers_str = params["numbers"][0]
-                    data = [float(x.strip()) for x in numbers_str.split(",")]
-                except ValueError:
+            message = await receive()
+            body_bytes = message.get("body", b"")
+            print(body_bytes)
+            if not body_bytes:
+                params = parse_qs(query_string)
+                if "numbers" in params or params["numbers"][0]:
+                    try:
+                        numbers_str = params["numbers"][0]
+                        data = [float(x.strip()) for x in numbers_str.split(",")]
+                    except ValueError:
+                        status = 422
+                        raise ValueError("Parameter 'numbers' must be comma-separated numbers")
+                else:
                     status = 422
-                    raise ValueError("Parameter 'numbers' must be comma-separated numbers")
-            else:
-                message = await receive()
-                body_bytes = message.get("body", b"")
-                
-                if not body_bytes:
-                    status = 422
-                    raise ValueError("Missing request body or numbers parameter")
-                    
+                    raise ValueError("Missing request body or numbers parameter")                        
+                status = 422
+                raise ValueError("Missing request body or numbers parameter")
+            else: 
                 try:
                     data = json.loads(body_bytes)
                 except json.JSONDecodeError:
                     status = 422
                     raise ValueError("Request body must be a valid JSON")
 
+            if not isinstance(data, list):
+                status = 422
+                raise ValueError("Data must be a list")
+        
             if not data:
                 status = 400
                 raise ValueError("List is empty")
@@ -115,18 +129,20 @@ async def application(
 
 
 def get_factorial(n: int) -> int:
+    if n == 0:
+        return 1
     res = 1
     for i in range(2, n + 1):
         res *= i
     return res
 
-
 def get_fibonacci(n: int) -> int:
+    if n == 0:
+        return 0
     a, b = 0, 1
-    for _ in range(n):
+    for _ in range(n - 1):
         a, b = b, a + b
-    return a
-
+    return b
 
 def get_mean(data: list[float]) -> float:
     return sum(data) / len(data)
