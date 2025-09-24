@@ -103,6 +103,9 @@ async def application(
                     except Exception:
                         status = HTTPStatus.UNPROCESSABLE_ENTITY
                         raise ValueError("Invalid JSON")
+                    if data is None:
+                        status = HTTPStatus.UNPROCESSABLE_ENTITY
+                        raise ValueError("Missing values")
 
                     numbers = data if isinstance(data, list) else data.get("numbers")
 
