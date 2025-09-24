@@ -14,7 +14,7 @@ async def application(
         send: Корутина для отправки сообщений клиенту
     """
     
-    assert scope["type"] == "http"
+    #assert scope["type"] == "http"
 
     path = scope["path"]
     query = urllib.parse.parse_qs(scope["query_string"].decode())
