@@ -22,9 +22,6 @@ async def application(
         receive: Корутина для получения сообщений от клиента
         send: Корутина для отправки сообщений клиенту
     """
-
-    print(scope)
-
     if scope["type"] == "lifespan":
         while True:
             message = await receive()
@@ -36,7 +33,6 @@ async def application(
 
     if scope["type"] == "http":
         path = scope["path"].strip("/").split("/")
-        print(path)
         for root, handler in routes.items():
             if path[0] == root[0] and scope["method"] == root[1]:
                 await handler(scope, receive, send)

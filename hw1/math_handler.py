@@ -30,7 +30,7 @@ async def handle_factorial(
         await send_response({"error": "Query parameter 'n' must be a non-negative integer"}, send, HTTPStatus.BAD_REQUEST)
         return
     if not query["n"].isdigit():
-        await send_response({"error": "Query parameter 'n' must be an integer"}, send, HTTPStatus.UNPROCESSABLE_CONTENT)
+        await send_response({"error": "Query parameter 'n' must be an integer"}, send, HTTPStatus.UNPROCESSABLE_ENTITY)
         return
     n = int(query["n"])
 
@@ -62,7 +62,7 @@ async def handle_fibonacci(
         await send_response({"error": "Path parameter must be a non-negative integer"}, send, HTTPStatus.BAD_REQUEST)
         return
     if not path[1].isdigit():
-        await send_response({"error": "Path parameter must be an integer"}, send, HTTPStatus.UNPROCESSABLE_CONTENT)
+        await send_response({"error": "Path parameter must be an integer"}, send, HTTPStatus.UNPROCESSABLE_ENTITY)
         return
     n = int(path[1])
     
