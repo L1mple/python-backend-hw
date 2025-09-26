@@ -86,8 +86,8 @@ async def application(
             return
         # По тестам JSON-тело: массив чисел, GET /mean
         body = await _read_body(receive)
-        if body is None:
-            await _send_json(send, {"error": "Unprocessable"}, status=400)
+        if body is None or body == b"":
+            await _send_json(send, {"error": "Unprocessable"}, status=422)
             return
         # Ожидаем JSON-массив
         import json
@@ -98,7 +98,7 @@ async def application(
             await _send_json(send, {"error": "Unprocessable"}, status=422)
             return
         if not isinstance(data, list):
-            await _send_json(send, {"error": "Bad Request"}, status=400)
+            await _send_json(send, {"error": "Bad Request"}, status=422)
             return
         if len(data) == 0:
             await _send_json(send, {"error": "Bad Request"}, status=400)
