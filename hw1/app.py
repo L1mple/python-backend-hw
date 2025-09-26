@@ -1,6 +1,7 @@
 from typing import Any, Awaitable, Callable
 from http import HTTPStatus
 import json
+from urllib.parse import urlparse
 
 
 # Math backend
@@ -31,9 +32,9 @@ def mean(numbers: list[float]) -> float:
 
 
 # Endpoints
-def factorial_endpoint(n_raw) -> int | HTTPStatus:
+def factorial_endpoint(params: str, data: Any) -> int | HTTPStatus:
     try:
-        n = int(n_raw[2:])
+        n = int(params[2:])
         if n < 0:
             return HTTPStatus.BAD_REQUEST
     except ValueError:
@@ -41,9 +42,9 @@ def factorial_endpoint(n_raw) -> int | HTTPStatus:
     return factorial(n)
 
 
-def fibonacci_endpoint(n_raw) -> int | HTTPStatus:
+def fibonacci_endpoint(params: str, data: Any) -> int | HTTPStatus:
     try:
-        n = int(n_raw)
+        n = int(params)
         if n < 0:
             return HTTPStatus.BAD_REQUEST
     except ValueError:
@@ -51,11 +52,27 @@ def fibonacci_endpoint(n_raw) -> int | HTTPStatus:
     return fibonacci(n)
 
 
-def mean_endpoint(numbers_raw) -> float | HTTPStatus:
+def mean_endpoint(params: str, data: bytes) -> float | HTTPStatus:
+    # Expect JSON array in the request body
+    if not data:
+        return HTTPStatus.UNPROCESSABLE_ENTITY
     try:
-        numbers = [float(number) for number in numbers_raw[8:].split(",")]
-    except ValueError:
-        return HTTPStatus.UNPROCESSABLE_CONTENT
+        payload = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return HTTPStatus.UNPROCESSABLE_ENTITY
+
+    if payload is None:
+        return HTTPStatus.UNPROCESSABLE_ENTITY
+    if not isinstance(payload, list):
+        return HTTPStatus.UNPROCESSABLE_ENTITY
+    if len(payload) == 0:
+        return HTTPStatus.BAD_REQUEST
+
+    try:
+        numbers = [float(value) for value in payload]
+    except (TypeError, ValueError):
+        return HTTPStatus.BAD_REQUEST
+
     return mean(numbers)
 
 
@@ -67,26 +84,42 @@ ENDPOINTS = {
 ###
 
 
-def parse_query(path: str, query_string: str) -> tuple[str, str]:
-    parts = path.split("/")
-    if len(parts) == 3:
-        # return endpoint and params
-        return (parts[1], parts[2])
-    else:
-        # return endpoint and cgi params
-        return (parts[1], query_string)
-
-
-def get_endpoint(scope: dict[str, Any]) -> Callable[[...], Any]:
+def get_endpoint_name(scope: dict[str, Any]) -> str:
+    """Return endpoint name (first path segment) using urlparse."""
     path = scope["path"]
-    query_string = scope["query_string"].decode()
-    endpoint, params = parse_query(path, query_string)
+    parsed = urlparse(path)
+    clean_path = parsed.path.strip("/")
+    if not clean_path:
+        return ""
+    first, *_ = clean_path.split("/", 1)
+    return first
+
+
+def get_param_from_url(scope: dict[str, Any]) -> str:
+    """Return the parameter part: path segment if present, else the raw query string.
+
+    This preserves existing behavior where factorial expects a raw
+    "n=..." style string and fibonacci expects the second path segment.
+    """
+    path = scope["path"]
+    parsed = urlparse(path)
+    clean_path = parsed.path.strip("/")
+    parts = clean_path.split("/") if clean_path else []
+    if len(parts) >= 2 and parts[1]:
+        return parts[1]
+    # fallback to decoded query string (without '?')
+    return scope.get("query_string", b"").decode()
+
+
+def execute_endpoint(scope: dict[str, Any], data: Any) -> Callable[[...], Any]:
+    endpoint = get_endpoint_name(scope)
+    params = get_param_from_url(scope)
     try:
         func = ENDPOINTS[endpoint]
     except KeyError:
         return -1, HTTPStatus.NOT_FOUND
 
-    result = func(params)
+    result = func(params, data)
     if isinstance(result, HTTPStatus):
         return -1, result
     else:
@@ -157,7 +190,8 @@ async def application(
         )
         return
 
-    result, status = get_endpoint(scope)
+    data = await read_request_body(receive)
+    result, status = execute_endpoint(scope, data)
     await send(
         {
             "type": "http.response.start",
