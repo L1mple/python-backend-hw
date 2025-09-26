@@ -63,7 +63,9 @@ async def application(
                             n = int(params["n"][0])
                             if n < 0:
                                 status = 400
-                                response_body = {"error": "Parameter 'n' must be non-negative"}
+                                response_body = {
+                                    "error": "Parameter 'n' must be non-negative"
+                                }
                             else:
                                 # Вычисляем факториал
                                 result = 1
@@ -72,7 +74,9 @@ async def application(
                                 response_body = {"result": result}
                         except ValueError:
                             status = 422
-                            response_body = {"error": "Parameter 'n' must be an integer"}
+                            response_body = {
+                                "error": "Parameter 'n' must be an integer"
+                            }
 
             elif path.startswith("/fibonacci"):
                 # Обработка /fibonacci/<n>
@@ -113,10 +117,14 @@ async def application(
                             numbers = json.loads(body)
                             if not isinstance(numbers, list):
                                 status = 422
-                                response_body = {"error": "Input must be a list of numbers"}
+                                response_body = {
+                                    "error": "Input must be a list of numbers"
+                                }
                             elif not numbers:
                                 status = 400
-                                response_body = {"error": "List of numbers cannot be empty"}
+                                response_body = {
+                                    "error": "List of numbers cannot be empty"
+                                }
                             else:
                                 try:
                                     numbers = [float(x) for x in numbers]
@@ -124,7 +132,9 @@ async def application(
                                     response_body = {"result": result}
                                 except (ValueError, TypeError):
                                     status = 422
-                                    response_body = {"error": "All elements must be numbers"}
+                                    response_body = {
+                                        "error": "All elements must be numbers"
+                                    }
                         except json.JSONDecodeError:
                             status = 422
                             response_body = {"error": "Invalid JSON format"}
@@ -137,22 +147,27 @@ async def application(
     response_bytes = json.dumps(response_body).encode("utf-8")
 
     # Отправка заголовков
-    await send({
-        "type": "http.response.start",
-        "status": status,
-        "headers": [
-            [b"content-type", b"application/json"],
-            [b"content-length", str(len(response_bytes)).encode("utf-8")],
-        ],
-    })
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                [b"content-type", b"application/json"],
+                [b"content-length", str(len(response_bytes)).encode("utf-8")],
+            ],
+        }
+    )
 
     # Отправка тела ответа
-    await send({
-        "type": "http.response.body",
-        "body": response_bytes,
-    })
+    await send(
+        {
+            "type": "http.response.body",
+            "body": response_bytes,
+        }
+    )
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("app:application", host="0.0.0.0", port=8000, reload=True)
