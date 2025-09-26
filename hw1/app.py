@@ -38,7 +38,7 @@ def factorial_endpoint(params: str, data: Any) -> int | HTTPStatus:
         if n < 0:
             return HTTPStatus.BAD_REQUEST
     except ValueError:
-        return HTTPStatus.UNPROCESSABLE_CONTENT
+        return HTTPStatus.UNPROCESSABLE_ENTITY
     return factorial(n)
 
 
@@ -48,7 +48,7 @@ def fibonacci_endpoint(params: str, data: Any) -> int | HTTPStatus:
         if n < 0:
             return HTTPStatus.BAD_REQUEST
     except ValueError:
-        return HTTPStatus.UNPROCESSABLE_CONTENT
+        return HTTPStatus.UNPROCESSABLE_ENTITY
     return fibonacci(n)
 
 
