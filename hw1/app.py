@@ -30,13 +30,11 @@ async def application(
     method = scope.get("method", "").upper()
     path = scope.get("path", "")
 
-    # Для неподдерживаемых методов возвращаем 422
-    if method != "GET":
-        await _send_json(send, {"error": "Unprocessable"}, status=422)
-        return
-
-    # Маршрутизация
+    # Маршрутизация (сначала проверяем путь)
     if path.startswith("/fibonacci"):
+        if method != "GET":
+            await _send_json(send, {"error": "Unprocessable"}, status=422)
+            return
         # Ожидаем форму /fibonacci/<n>
         parts = path.split("/")
         # ['', 'fibonacci', '<n>'] ожидается длина 3
@@ -56,8 +54,10 @@ async def application(
         result = _fib(n)
         await _send_json(send, {"result": result}, status=200)
         return
-
-    if path == "/factorial":
+    elif path == "/factorial":
+        if method != "GET":
+            await _send_json(send, {"error": "Unprocessable"}, status=422)
+            return
         # Параметр n из query_string
         raw_qs = scope.get("query_string", b"") or b""
         try:
@@ -80,7 +80,10 @@ async def application(
         await _send_json(send, {"result": _fact(n)}, status=200)
         return
 
-    if path == "/mean":
+    elif path == "/mean":
+        if method != "GET":
+            await _send_json(send, {"error": "Unprocessable"}, status=422)
+            return
         # По тестам JSON-тело: массив чисел, GET /mean
         body = await _read_body(receive)
         if body is None:
