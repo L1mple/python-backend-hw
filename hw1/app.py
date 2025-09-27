@@ -38,7 +38,7 @@ async def application(
         while True:
             message = await receive()
             if message['type'] == 'http.request':
-                body += message.get('body', 'b')
+                body += message.get('body', b'')
                 if not message.get('more_body', False):
                     break
         if body:
@@ -52,6 +52,7 @@ async def application(
         return
     
     try:
+
         if path == '/factorial':
             if 'n' not in query_params or not query_params['n'][0]:
                 await send_response(422, {})
@@ -69,7 +70,62 @@ async def application(
             except ValueError:
               await send_response(422, {})
               return
-        
+            
+        elif path.startswith('/fibonacci/'):
+            try:
+                n_str = path[11:]
+                if not n_str:
+                    await send_response(422, {})
+                    return
+                n = int(n_str)
+
+                if n < 0:
+                    await send_response(400, {})
+                    return
+                if n == 0:
+                    await send_response(200, {'result': 0})
+                    return
+                elif n == 1:
+                    await send_response(200, {'result': 1})
+                    return
+                else: 
+                    a, b = 0, 1
+                    for _ in range(2, n + 1):
+                        a, b = b, a + b
+                    await send_response(200, {'result': b})
+                    return 
+
+            except Exception:
+                await send_response(422, {})
+                return
+
+        elif path == '/mean':
+            body = await receive_body()
+
+            if body is None:
+                await send_response(422, {})
+                return
+            
+            if not isinstance(body, list):
+                await send_response(400, {})
+                return
+            
+            if len(body) == 0:
+                await send_response(400, {})
+                return
+            try:
+                numbers = [float(x) for x in body]
+                mean_value = sum(numbers) / len(numbers)
+                await send_response(200, {'result': mean_value})
+                return 
+            except (ValueError, TypeError):
+                await send_response(400, {})
+                return
+
+        else:
+            await send_response(404, {})
+            return
+
 
     except Exception:
         await send_response(500, {})
