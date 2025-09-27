@@ -14,8 +14,20 @@ async def application(
         receive: Корутина для получения сообщений от клиента
         send: Корутина для отправки сообщений клиенту
     """
+    
+    if scope['type'] == 'lifespan':
+        while True:
+            message = await receive()
+            if message['type'] == 'lifespan.startup':
+                await send({'type': 'lifespan.startup.complete'})
+            elif message['type'] == 'lifespan.shutdown':
+                await send({'type': 'lifespan.shutdown.complete'})
+                break
+        return
+    
     if scope['type'] != 'http':
         return
+    
     method = scope['method']
     path = scope['path']
     query_string = scope.get('query_string', b'').decode('utf-8')
@@ -33,6 +45,7 @@ async def application(
             'type': 'http.response.body', 
             'body': json.dumps(body).encode('utf-8'),
         })
+    
     async def receive_body():
         body = b''
         while True:
@@ -47,12 +60,12 @@ async def application(
             except json.JSONDecodeError:
                 return None
         return None
+    
     if method != 'GET':
         await send_response(404, {})
         return
     
     try:
-
         if path == '/factorial':
             if 'n' not in query_params or not query_params['n'][0]:
                 await send_response(422, {})
@@ -126,10 +139,10 @@ async def application(
             await send_response(404, {})
             return
 
-
     except Exception:
         await send_response(500, {})
         return
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:application", host="0.0.0.0", port=8000, reload=True)
