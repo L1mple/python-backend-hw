@@ -1,0 +1,39 @@
+name: "HW2 Tests"
+
+# Запускаем тесты при изменении файлов в hw2/hw/
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ 'hw2/hw/**' ]
+  push:
+    branches: [ main ]
+    paths: [ 'hw2/hw/**' ]
+
+jobs:
+  test-hw2:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      working-directory: hw2/hw
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests
+      working-directory: hw2/hw
+      env:
+        PYTHONPATH: ${{ github.workspace }}/hw2/hw
+      run: |
+        pytest test_homework2.py -v
