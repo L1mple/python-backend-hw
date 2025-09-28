@@ -3,6 +3,107 @@ import json
 import urllib.parse
 
 
+async def handle_factorial(query_string: str) -> tuple[int, dict[str, Any]]:
+    """Обрабатывает запрос /factorial?n=<number>."""
+    status = 200
+    response_body = {"result": None}
+
+    if not query_string:
+        status = 422
+        response_body = {"error": "Missing parameter 'n'"}
+    else:
+        params = urllib.parse.parse_qs(query_string)
+        if "n" not in params or len(params["n"]) != 1:
+            status = 422
+            response_body = {"error": "Invalid parameter 'n'"}
+        else:
+            try:
+                n = int(params["n"][0])
+                if n < 0:
+                    status = 400
+                    response_body = {"error": "Parameter 'n' must be non-negative"}
+                else:
+                    # Вычисляем факториал
+                    result = 1
+                    for i in range(1, n + 1):
+                        result *= i
+                    response_body = {"result": result}
+            except ValueError:
+                status = 422
+                response_body = {"error": "Parameter 'n' must be an integer"}
+
+    return status, response_body
+
+
+async def handle_fibonacci(path: str) -> tuple[int, dict[str, Any]]:
+    """Обрабатывает запрос /fibonacci/<n>."""
+    status = 200
+    response_body = {"result": None}
+
+    try:
+        n = int(path.split("/")[-1])
+        if n < 0:
+            status = 400
+            response_body = {"error": "Parameter must be non-negative"}
+        else:
+            # Вычисляем число Фибоначчи
+            if n == 0:
+                result = 0
+            elif n == 1:
+                result = 1
+            else:
+                a, b = 0, 1
+                for _ in range(2, n + 1):
+                    a, b = b, a + b
+                result = b
+            response_body = {"result": result}
+    except ValueError:
+        status = 422
+        response_body = {"error": "Parameter must be an integer"}
+
+    return status, response_body
+
+
+async def handle_mean(
+    receive: Callable[[], Awaitable[dict[str, Any]]],
+) -> tuple[int, dict[str, Any]]:
+    """Обрабатывает запрос /mean с JSON в теле запроса."""
+    status = 200
+    response_body = {"result": None}
+
+    message = await receive()
+    if message["type"] != "http.request":
+        status = 422
+        response_body = {"error": "Invalid request format"}
+    else:
+        body = message.get("body", b"")
+        if not body:
+            status = 422
+            response_body = {"error": "Missing numbers"}
+        else:
+            try:
+                numbers = json.loads(body)
+                if not isinstance(numbers, list):
+                    status = 422
+                    response_body = {"error": "Input must be a list of numbers"}
+                elif not numbers:
+                    status = 400
+                    response_body = {"error": "List of numbers cannot be empty"}
+                else:
+                    try:
+                        numbers = [float(x) for x in numbers]
+                        result = sum(numbers) / len(numbers)
+                        response_body = {"result": result}
+                    except (ValueError, TypeError):
+                        status = 422
+                        response_body = {"error": "All elements must be numbers"}
+            except json.JSONDecodeError:
+                status = 422
+                response_body = {"error": "Invalid JSON format"}
+
+    return status, response_body
+
+
 async def application(
     scope: dict[str, Any],
     receive: Callable[[], Awaitable[dict[str, Any]]],
@@ -14,7 +115,6 @@ async def application(
         receive: Корутина для получения сообщений от клиента
         send: Корутина для отправки сообщений клиенту
     """
-
     # Обработка lifespan-сообщений
     if scope["type"] == "lifespan":
         while True:
@@ -49,95 +149,11 @@ async def application(
             response_body = {"error": "Not found"}
         else:
             if path.startswith("/factorial"):
-                # Обработка /factorial?n=<number>
-                if not query_string:
-                    status = 422
-                    response_body = {"error": "Missing parameter 'n'"}
-                else:
-                    params = urllib.parse.parse_qs(query_string)
-                    if "n" not in params or len(params["n"]) != 1:
-                        status = 422
-                        response_body = {"error": "Invalid parameter 'n'"}
-                    else:
-                        try:
-                            n = int(params["n"][0])
-                            if n < 0:
-                                status = 400
-                                response_body = {
-                                    "error": "Parameter 'n' must be non-negative"
-                                }
-                            else:
-                                # Вычисляем факториал
-                                result = 1
-                                for i in range(1, n + 1):
-                                    result *= i
-                                response_body = {"result": result}
-                        except ValueError:
-                            status = 422
-                            response_body = {
-                                "error": "Parameter 'n' must be an integer"
-                            }
-
+                status, response_body = await handle_factorial(query_string)
             elif path.startswith("/fibonacci"):
-                # Обработка /fibonacci/<n>
-                try:
-                    n = int(path.split("/")[-1])
-                    if n < 0:
-                        status = 400
-                        response_body = {"error": "Parameter must be non-negative"}
-                    else:
-                        # Вычисляем число Фибоначчи
-                        if n == 0:
-                            result = 0
-                        elif n == 1:
-                            result = 1
-                        else:
-                            a, b = 0, 1
-                            for _ in range(2, n + 1):
-                                a, b = b, a + b
-                            result = b
-                        response_body = {"result": result}
-                except ValueError:
-                    status = 422
-                    response_body = {"error": "Parameter must be an integer"}
-
+                status, response_body = await handle_fibonacci(path)
             elif path.startswith("/mean"):
-                # Обработка /mean с JSON в теле запроса
-                message = await receive()
-                if message["type"] != "http.request":
-                    status = 422
-                    response_body = {"error": "Invalid request format"}
-                else:
-                    body = message.get("body", b"")
-                    if not body:
-                        status = 422
-                        response_body = {"error": "Missing numbers"}
-                    else:
-                        try:
-                            numbers = json.loads(body)
-                            if not isinstance(numbers, list):
-                                status = 422
-                                response_body = {
-                                    "error": "Input must be a list of numbers"
-                                }
-                            elif not numbers:
-                                status = 400
-                                response_body = {
-                                    "error": "List of numbers cannot be empty"
-                                }
-                            else:
-                                try:
-                                    numbers = [float(x) for x in numbers]
-                                    result = sum(numbers) / len(numbers)
-                                    response_body = {"result": result}
-                                except (ValueError, TypeError):
-                                    status = 422
-                                    response_body = {
-                                        "error": "All elements must be numbers"
-                                    }
-                        except json.JSONDecodeError:
-                            status = 422
-                            response_body = {"error": "Invalid JSON format"}
+                status, response_body = await handle_mean(receive)
 
     except Exception:
         status = 422
