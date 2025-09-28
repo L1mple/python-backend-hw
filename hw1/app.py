@@ -1,4 +1,18 @@
 from typing import Any, Awaitable, Callable
+from urllib.parse import parse_qs
+from math import factorial
+
+
+def fibonacci(n: int):
+    if n == 0:
+        return 0
+    elif n == 1:
+        return 1
+    
+    a, b = 0, 1
+    for _ in range(2, n + 1):
+        a, b = b, a + b
+    return b
 
 
 async def application(
@@ -12,8 +26,128 @@ async def application(
         receive: Корутина для получения сообщений от клиента
         send: Корутина для отправки сообщений клиенту
     """
-    # TODO: Ваша реализация здесь
+
+    if "/fibonacci" in scope.get("path"):
+        val = scope.get("path")
+        if val:
+            param = val.replace("/fibonacci/", "")
+            try: 
+                param_int = int(param)
+                res = fibonacci(param_int)
+
+                await send({
+                    'type': 'http.response.start',
+                    'status': 200,
+                    'headers': [[b'content-type', b'text/plain']],
+                })
+                await send({
+                    'type': 'http.response.body',
+                    'body': str(res).encode('utf-8'),
+                })
+
+            except:
+                await send({
+                    'type': 'http.response.start',
+                    'status': 400,
+                    'headers': [[b'content-type', b'text/plain']],
+                })
+                await send({
+                    'type': 'http.response.body',
+                    'body': b'Invalid parameter',
+                })
+
+    elif "/factorial" in scope.get("path"):
+        try:
+            query = scope.get("query_string")
+            query_str = query.decode('utf-8')
+            params = parse_qs(query_str)
+            n_values = params.get('n')
+
+            if n_values:
+                n = int(n_values[0])
+                res = factorial(n)
+
+                await send({
+                    'type': 'http.response.start',
+                    'status': 200,
+                    'headers': [[b'content-type', b'text/plain']],
+                })
+                await send({
+                    'type': 'http.response.body',
+                    'body': str(res).encode('utf-8'),
+                })
+            else:
+                await send({
+                    'type': 'http.response.start',
+                    'status': 404,
+                    'headers': [[b'content-type', b'text/plain']],
+                })
+                await send({
+                    'type': 'http.response.body',
+                    'body': b'Not found n',
+                })
+
+            
+        except:
+            await send({
+                'type': 'http.response.start',
+                'status': 400,
+                'headers': [[b'content-type', b'text/plain']],
+            })
+            await send({
+                'type': 'http.response.body',
+                'body': b'Invalid parameter',
+            })
+
+
+
+    elif "/mean" in scope.get("path"):
+        try:
+            query = scope.get("query_string")
+            query_str = query.decode('utf-8')
+            params = parse_qs(query_str)
+            numbers_values = params.get('numbers')[0].split(",")
+            
+            int_numbs = []
+            for n in numbers_values:
+                int_numbs.append(int(n))
+                
+            average = sum(int_numbs) / len(int_numbs)
+
+            if scope['type'] == 'http':
+                await send({
+                    'type': 'http.response.start',
+                    'status': 200,
+                    'headers': [[b'content-type', b'text/plain']],
+                })
+                await send({
+                    'type': 'http.response.body',
+                    'body': str(average).encode('utf-8'),
+                })
+        except:
+            await send({
+                'type': 'http.response.start',
+                'status': 400,
+                'headers': [[b'content-type', b'text/plain']],
+            })
+            await send({
+                'type': 'http.response.body',
+                'body': b'Invalid parameter',
+            })
+            
+    else:
+        await send({
+            'type': 'http.response.start',
+            'status': 404,
+            'headers': [[b'content-type', b'text/plain']],
+        })
+        await send({
+            'type': 'http.response.body',
+            'body': b'Not found',
+        })
+
+    
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:application", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app:application", host="0.0.0.0", port=8001, reload=True)
