@@ -136,32 +136,23 @@ async def application(
             query = scope.get("query_string")
             query_str = query.decode('utf-8')
             params = parse_qs(query_str)
-            print(params)
 
             int_numbs = []
-            if not params or 'numbers' not in params or not params['numbers'][0].strip():
+            body = b""
+            more_body = True
+            while more_body:
+                message = await receive()
+                if message['type'] == 'http.request':
+                    body += message.get('body', b'')
+                    more_body = message.get('more_body', False)
+                else:
+                    more_body = False
 
-                # Если в query string нет параметра numbers, читаем тело запроса как JSON
-                body = b""
-                more_body = True
-                while more_body:
-                    message = await receive()
-                    if message['type'] == 'http.request':
-                        body += message.get('body', b'')
-                        more_body = message.get('more_body', False)
-                    else:
-                        more_body = False
+            if body:
+                try:
+                    int_numbs = json.loads(body)
 
-                if body:
-                    try:
-                        data = json.loads(body)
-                        int_numbs = data.get('numbers')
-                        print("int_numbs", int_numbs, type(int_numbs))
-
-                    except Exception:
-                        pass
-
-                if not int_numbs:
+                except Exception:
                     await send({
                         'type': 'http.response.start',
                         'status': 400,
@@ -172,19 +163,31 @@ async def application(
                         'body': json.dumps({"error": "params must be not empty"}).encode('utf-8'),
                     })
                     return
-                
-            else:
-            
-                numbers_values = params.get('numbers')[0].split(",")
-                print(numbers_values)
-                
-                
-                for n in numbers_values:
-                    int_numbs.append(float(n.strip()))
 
-                print(int_numbs)
 
-            
+            if int_numbs == []:
+                await send({
+                    'type': 'http.response.start',
+                    'status': 400,  # BAD_REQUEST для пустого списка
+                    'headers': [[b'content-type', b'application/json']],
+                })
+                await send({
+                    'type': 'http.response.body',
+                    'body': json.dumps({"error": "params must be not empty"}).encode('utf-8'),
+                })
+                return
+
+            if int_numbs is None:
+                await send({
+                    'type': 'http.response.start',
+                    'status': 422,  # UNPROCESSABLE_ENTITY для отсутствия параметров
+                    'headers': [[b'content-type', b'application/json']],
+                })
+                await send({
+                    'type': 'http.response.body',
+                    'body': json.dumps({"error": "params must be not empty"}).encode('utf-8'),
+                })
+                return
                 
             average = sum(int_numbs) / len(int_numbs)
 
