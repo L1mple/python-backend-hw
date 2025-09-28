@@ -1,6 +1,7 @@
 from typing import Any, Awaitable, Callable
 from urllib.parse import parse_qs
 from math import factorial
+import json
 
 
 def fibonacci(n: int):
@@ -27,7 +28,7 @@ async def application(
         send: Корутина для отправки сообщений клиенту
     """
 
-    if "/fibonacci" in scope.get("path"):
+    if scope.get("path") and "/fibonacci" in scope.get("path"):
         val = scope.get("path")
         if val:
             param = val.replace("/fibonacci/", "")
@@ -38,25 +39,25 @@ async def application(
                 await send({
                     'type': 'http.response.start',
                     'status': 200,
-                    'headers': [[b'content-type', b'text/plain']],
+                    'headers': [[b'content-type', b'application/json']],
                 })
                 await send({
                     'type': 'http.response.body',
-                    'body': str(res).encode('utf-8'),
+                    'body': json.dumps({"result": res}).encode('utf-8'),
                 })
 
             except:
                 await send({
                     'type': 'http.response.start',
-                    'status': 400,
-                    'headers': [[b'content-type', b'text/plain']],
+                    'status': 422,
+                    'headers': [[b'content-type', b'application/json']],
                 })
                 await send({
                     'type': 'http.response.body',
-                    'body': b'Invalid parameter',
+                    'body': json.dumps({"error": "Invalid parameter"}).encode('utf-8'),
                 })
 
-    elif "/factorial" in scope.get("path"):
+    elif scope.get("path") and "/factorial" in scope.get("path"):
         try:
             query = scope.get("query_string")
             query_str = query.decode('utf-8')
@@ -70,38 +71,38 @@ async def application(
                 await send({
                     'type': 'http.response.start',
                     'status': 200,
-                    'headers': [[b'content-type', b'text/plain']],
+                    'headers': [[b'content-type', b'application/json']],
                 })
                 await send({
                     'type': 'http.response.body',
-                    'body': str(res).encode('utf-8'),
+                    'body': json.dumps({"result": res}).encode('utf-8'),
                 })
             else:
                 await send({
                     'type': 'http.response.start',
-                    'status': 404,
-                    'headers': [[b'content-type', b'text/plain']],
+                    'status': 422,
+                    'headers': [[b'content-type', b'application/json']],
                 })
                 await send({
                     'type': 'http.response.body',
-                    'body': b'Not found n',
+                    'body': json.dumps({"error": "Not found n in params"}).encode('utf-8'),
                 })
 
             
         except:
             await send({
                 'type': 'http.response.start',
-                'status': 400,
-                'headers': [[b'content-type', b'text/plain']],
+                'status': 422,
+                'headers': [[b'content-type', b'application/json']],
             })
             await send({
                 'type': 'http.response.body',
-                'body': b'Invalid parameter',
+                'body': json.dumps({"error": "Invalid parameter"}).encode('utf-8'),
             })
 
 
 
-    elif "/mean" in scope.get("path"):
+    elif scope.get("path") and "/mean" in scope.get("path"):
         try:
             query = scope.get("query_string")
             query_str = query.decode('utf-8')
@@ -118,32 +119,32 @@ async def application(
                 await send({
                     'type': 'http.response.start',
                     'status': 200,
-                    'headers': [[b'content-type', b'text/plain']],
+                    'headers': [[b'content-type', b'application/json']],
                 })
                 await send({
                     'type': 'http.response.body',
-                    'body': str(average).encode('utf-8'),
+                    'body': json.dumps({"result": average}).encode('utf-8'),
                 })
         except:
             await send({
                 'type': 'http.response.start',
-                'status': 400,
-                'headers': [[b'content-type', b'text/plain']],
+                'status': 422,
+                'headers': [[b'content-type', b'application/json']],
             })
             await send({
                 'type': 'http.response.body',
-                'body': b'Invalid parameter',
+                'body': json.dumps({"error": "Invalid parameter"}).encode('utf-8'),
             })
             
     else:
         await send({
             'type': 'http.response.start',
             'status': 404,
-            'headers': [[b'content-type', b'text/plain']],
+            'headers': [[b'content-type', b'application/json']],
         })
         await send({
             'type': 'http.response.body',
-            'body': b'Not found',
+            'body': json.dumps({"error": "Not found"}).encode('utf-8'),
         })
 
     
