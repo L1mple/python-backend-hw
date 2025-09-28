@@ -48,7 +48,6 @@ async def application(
     method = scope["method"]
     path = scope["path"]
 
-    ################## /fibonacci/<n> ##################
     if method == "GET" and path.startswith("/fibonacci"):
         if path == "/fibonacci":
             await _send_json(
@@ -79,7 +78,6 @@ async def application(
         await _send_json(send, HTTPStatus.OK, {"result": a})
         return
 
-    ################## /factorial?n=... ##################
     if method == "GET" and path == "/factorial":
         query = parse_qs(scope.get("query_string", b"").decode())
         raw = query.get("n")
@@ -104,8 +102,6 @@ async def application(
         await _send_json(send, HTTPStatus.OK, {"result": math.factorial(n)})
         return
 
-    ################## /mean?numbers=<n1, n2, n3> ##################
-    # в примере вызова list в запросе, но в задании со слайда он в теле запроса
     if method == "GET" and path == "/mean":
         body = await _read_body(receive)
         if not body:
