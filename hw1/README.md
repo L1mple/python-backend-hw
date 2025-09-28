@@ -5,7 +5,7 @@
 
 ### 1. Установите зависимости
 ```bash
-pip install -r requirements.txt
+pip3 install --break-system-packages -r requirements.txt
 ```
 
 ### 2. Реализуйте ASGI приложение
