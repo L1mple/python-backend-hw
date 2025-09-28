@@ -5,6 +5,9 @@ import json
 
 
 def fibonacci(n: int):
+    if n < 0:
+        raise ValueError()
+    
     if n == 0:
         return 0
     elif n == 1:
@@ -34,6 +37,19 @@ async def application(
             param = val.replace("/fibonacci/", "")
             try: 
                 param_int = int(param)
+
+                if param_int < 0:
+                    await send({
+                        'type': 'http.response.start',
+                        'status': 400,
+                        'headers': [[b'content-type', b'application/json']],
+                        })
+                    await send({
+                        'type': 'http.response.body',
+                        'body': json.dumps({"error": "n must be > 0"}).encode('utf-8'),
+                    })
+                    return
+                
                 res = fibonacci(param_int)
 
                 await send({
@@ -66,6 +82,19 @@ async def application(
 
             if n_values:
                 n = int(n_values[0])
+
+                if n < 0:
+                    await send({
+                        'type': 'http.response.start',
+                        'status': 400,
+                        'headers': [[b'content-type', b'application/json']],
+                        })
+                    await send({
+                        'type': 'http.response.body',
+                        'body': json.dumps({"error": "n must be > 0"}).encode('utf-8'),
+                    })
+                    return
+
                 res = factorial(n)
 
                 await send({
@@ -107,11 +136,55 @@ async def application(
             query = scope.get("query_string")
             query_str = query.decode('utf-8')
             params = parse_qs(query_str)
-            numbers_values = params.get('numbers')[0].split(",")
-            
+            print(params)
+
             int_numbs = []
-            for n in numbers_values:
-                int_numbs.append(int(n))
+            if not params or 'numbers' not in params or not params['numbers'][0].strip():
+
+                # Если в query string нет параметра numbers, читаем тело запроса как JSON
+                body = b""
+                more_body = True
+                while more_body:
+                    message = await receive()
+                    if message['type'] == 'http.request':
+                        body += message.get('body', b'')
+                        more_body = message.get('more_body', False)
+                    else:
+                        more_body = False
+
+                if body:
+                    try:
+                        data = json.loads(body)
+                        int_numbs = data.get('numbers')
+                        print("int_numbs", int_numbs, type(int_numbs))
+
+                    except Exception:
+                        pass
+
+                if not int_numbs:
+                    await send({
+                        'type': 'http.response.start',
+                        'status': 400,
+                        'headers': [[b'content-type', b'application/json']],
+                        })
+                    await send({
+                        'type': 'http.response.body',
+                        'body': json.dumps({"error": "params must be not empty"}).encode('utf-8'),
+                    })
+                    return
+                
+            else:
+            
+                numbers_values = params.get('numbers')[0].split(",")
+                print(numbers_values)
+                
+                
+                for n in numbers_values:
+                    int_numbs.append(float(n.strip()))
+
+                print(int_numbs)
+
+            
                 
             average = sum(int_numbs) / len(int_numbs)
 
