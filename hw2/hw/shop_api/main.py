@@ -162,7 +162,17 @@ def create_item(item: dict):
 @app.get("/item/{item_id}")
 def get_item(item_id: int):
     items = load_json(items_file)
-    return items[str(item_id)]
+
+    if str(item_id) not in items:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    item = items[str(item_id)]
+
+    # Для удаленных товаров возвращаем 404
+    if item.get('deleted', False):
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    return item
 
 
 @app.get("/item")
@@ -239,36 +249,45 @@ def update_item(item_id: int, item_data: dict):
 
     return updated_item
 
+
 @app.patch("/item/{item_id}")
 def patch_item(item_id: int, item_data: dict):
     items = load_json(items_file)
 
-    # Проверяем существование товара
     if str(item_id) not in items:
         raise HTTPException(status_code=404, detail="Item not found")
 
     item = items[str(item_id)]
 
-    # Проверяем, что товар не удален
+    # Для удаленных товаров возвращаем 304
     if item.get('deleted', False):
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=304, detail="Item is deleted")
 
-    # Частичное обновление - только переданные поля
+    # Проверяем на лишние поля
+    allowed_fields = {'name', 'price'}
+    extra_fields = set(item_data.keys()) - allowed_fields
+    if extra_fields:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Extra fields not allowed: {extra_fields}"
+        )
+
+    # Запрещаем менять deleted
+    if 'deleted' in item_data:
+        raise HTTPException(status_code=422, detail="Cannot change deleted status")
+
+    # Если тело пустое - возвращаем текущий товар без изменений
+    if not item_data:
+        return item
+
+    # Частичное обновление
     if 'name' in item_data:
         item['name'] = item_data['name']
 
     if 'price' in item_data:
-        # Проверяем что цена не отрицательная
         if item_data['price'] < 0:
             raise HTTPException(status_code=422, detail="Price cannot be negative")
         item['price'] = item_data['price']
-
-    # Запрещаем менять поле deleted через PATCH
-    if 'deleted' in item_data:
-        raise HTTPException(
-            status_code=422,
-            detail="Cannot change deleted status via PATCH"
-        )
 
     save_json(items, items_file)
     return item
@@ -278,39 +297,18 @@ def patch_item(item_id: int, item_data: dict):
 def delete_item(item_id: int):
     items = load_json(items_file)
 
-    # Проверяем существование товара
     if str(item_id) not in items:
-        response = Response(
-            content=None,
-            status_code=HTTPStatus.NOT_FOUND,
-            media_type="application/json",
-            headers={}
-        )
-        return response
+        return HTTPStatus.NOT_FOUND
 
     item = items[str(item_id)]
 
-    # Если товар уже удален, все равно возвращаем успех
-    if item.get('deleted', False):
-        response = Response(
-            content=item,
-            status_code=HTTPStatus.OK,
-            media_type="application/json",
-            headers={}
-        )
-        return response
+    # Если уже удален - все равно успех
+    if not item.get('deleted', False):
+        item['deleted'] = True
+        save_json(items, items_file)
 
-    # Мягкое удаление - помечаем как удаленный
-    item['deleted'] = True
-
-    save_json(items, items_file)
-    response = Response(
-        content=item,
-        status_code=HTTPStatus.OK,
-        media_type="application/json",
-        headers={}
-    )
-    return response
+    # Возвращаем просто сообщение, а не весь item
+    return HTTPStatus.OK
 
 
 if __name__ == "__main__":
