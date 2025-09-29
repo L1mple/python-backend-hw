@@ -4,6 +4,11 @@ from typing import List, Optional
 from .models import ItemCreate, ItemUpdate, ItemPatch, ItemOut, CartOut
 from .storage import ITEMS, CARTS, next_item_id, next_cart_id, compute_cart
 
+# ----- WebSocket chat -----
+from typing import Dict
+from uuid import uuid4
+from fastapi import WebSocket, WebSocketDisconnect
+
 
 app = FastAPI(title="Shop API")
 
@@ -135,3 +140,46 @@ def add_to_cart(cart_id: int, item_id: int):
         raise HTTPException(status_code=404, detail="Cart or Item not found")
     cart["items"][item_id] = cart["items"].get(item_id, 0) + 1
     return compute_cart(cart)
+
+
+# ----- WebSocket chat -----
+
+ROOMS: Dict[str, Dict[WebSocket, str]] = {}  # room -> {websocket: username}
+
+def _username() -> str:
+    return f"user-{uuid4().hex[:6]}"
+
+@app.websocket("/chat/{chat_name}")
+async def chat_ws(websocket: WebSocket, chat_name: str):
+    await websocket.accept()
+    username = _username()
+
+    room = ROOMS.setdefault(chat_name, {})
+    room[websocket] = username
+
+    try:
+        # опционально: сообщим остальным, что пользователь вошёл
+        for ws, user in list(room.items()):
+            if ws is not websocket:
+                await ws.send_text(f"* {username} joined *")
+
+        while True:
+            msg = await websocket.receive_text()
+            # рассылаем всем кроме отправителя
+            text = f"{username} :: {msg}"
+            for ws, user in list(room.items()):
+                if ws is not websocket:
+                    await ws.send_text(text)
+
+    except WebSocketDisconnect:
+        # убрать из комнаты
+        room.pop(websocket, None)
+        # опционально: сообщить о выходе
+        for ws in list(room.keys()):
+            try:
+                await ws.send_text(f"* {username} left *")
+            except Exception:
+                pass
+        # если комната опустела — удалить
+        if not room:
+            ROOMS.pop(chat_name, None)
