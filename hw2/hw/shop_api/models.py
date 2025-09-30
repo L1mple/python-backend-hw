@@ -1,5 +1,7 @@
-from pydantic import BaseModel, ConfigDict, PositiveInt, PositiveFloat, NonNegativeInt, NonNegativeFloat
 from typing import Optional
+
+from pydantic import (BaseModel, ConfigDict, NonNegativeFloat, NonNegativeInt,
+                      PositiveFloat, PositiveInt)
 
 
 class BaseItem(BaseModel):

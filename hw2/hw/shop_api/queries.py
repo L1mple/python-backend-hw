@@ -1,7 +1,7 @@
 import itertools
 
-from hw2.hw.shop_api.models import (BaseItem, Cart, CartFilters, CartItem,
-                                    Item, ItemFilters, PatchItem)
+from models import (BaseItem, Cart, CartFilters, CartItem, Item, ItemFilters,
+                    PatchItem)
 
 _carts = dict[int, Cart]()
 _items = dict[int, Item]()
