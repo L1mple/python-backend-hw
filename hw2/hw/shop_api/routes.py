@@ -2,8 +2,8 @@ from http import HTTPStatus
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
-from models import BaseItem, Cart, CartFilters, Item, ItemFilters, PatchItem
-from queries import (add_item, add_to_cart, create_empty_cart,
+from shop_api.models import BaseItem, Cart, CartFilters, Item, ItemFilters, PatchItem
+from shop_api.queries import (add_item, add_to_cart, create_empty_cart,
                      delete_item_by_id, get_cart_by_id, get_carts_filtered,
                      get_item_by_id, get_items_filtered, patch_item_query,
                      put_item_query)

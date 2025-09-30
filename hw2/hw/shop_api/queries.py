@@ -1,6 +1,6 @@
 import itertools
 
-from models import (BaseItem, Cart, CartFilters, CartItem, Item, ItemFilters,
+from shop_api.models import (BaseItem, Cart, CartFilters, CartItem, Item, ItemFilters,
                     PatchItem)
 
 _carts = dict[int, Cart]()

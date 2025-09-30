@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routes import router
+from shop_api.routes import router
 
 app = FastAPI(title="Shop API")
 
