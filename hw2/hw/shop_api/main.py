@@ -41,6 +41,7 @@ class CartItem(Base):
     cart: Mapped[Cart] = relationship(back_populates="items")
     item: Mapped[Item] = relationship()
 
+Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
 def get_db():
