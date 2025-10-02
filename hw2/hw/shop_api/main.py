@@ -187,4 +187,3 @@ def add_item_to_cart(cart_id: int, item_id: int):
     cart.price = total_price
     
     return cart
-
