@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # Pydantic-модели для валидации запросов/ответов

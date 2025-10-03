@@ -1,16 +1,13 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
-from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, field
 from http import HTTPStatus
+from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
-from shop_api.models import (
-    ItemCreate,
-    ItemUpdate,
-    ItemPatch,
-    ItemResponse,
-    CartResponse,
-    CartItem,
-)
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
+
+from shop_api.models import (CartItem, CartResponse, ItemCreate, ItemPatch,
+                             ItemResponse, ItemUpdate)
 
 app = FastAPI(title="Shop API")
 
@@ -267,3 +264,68 @@ async def delete_item(id: int) -> None:
     if id not in items:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Товар не найден")
     items[id]["deleted"] = True
+
+
+# WebSocket чат
+@dataclass(slots=True)
+class Broadcaster:
+    """Класс для broadcast в одной комнате"""
+
+    subscribers: list[WebSocket] = field(init=False, default_factory=list)
+    usernames: Dict[WebSocket, str] = field(
+        init=False, default_factory=dict
+    )  # {ws: username}
+
+    async def subscribe(self, ws: WebSocket) -> str:
+        """Подписка клиента, присвоение имени"""
+        await ws.accept()
+        self.subscribers.append(ws)
+        username = uuid4().hex[:8]  # Случайное имя (первые 8 символов uuid)
+        self.usernames[ws] = username
+        return username
+
+    async def unsubscribe(self, ws: WebSocket) -> str:
+        """Отписка клиента"""
+        if ws in self.subscribers:
+            self.subscribers.remove(ws)
+            username = self.usernames.pop(ws, "unknown")
+            return username
+        return "unknown"
+
+    async def publish(self, message: str) -> None:
+        """Broadcast сообщения в комнату"""
+        for ws in self.subscribers:
+            await ws.send_text(message)
+
+
+# Хранение комнат для чата (stateful, в памяти)
+chat_rooms: Dict[str, Broadcaster] = {}  # {chat_name: Broadcaster}
+
+
+@app.websocket("/chat/{chat_name}")
+async def ws_chat(ws: WebSocket, chat_name: str):
+    """Подключение к чату в комнате {chat_name}"""
+    # Получаем или создаём broadcaster для комнаты
+    if chat_name not in chat_rooms:
+        chat_rooms[chat_name] = Broadcaster()
+    broadcaster = chat_rooms[chat_name]
+
+    # Подписка и отправка приветствия
+    username = await broadcaster.subscribe(ws)
+    await broadcaster.publish(f"{username} :: joined the chat")
+
+    try:
+        while True:
+            # Получаем сообщение от клиента
+            message = await ws.receive_text()
+            # Форматируем и broadcast
+            formatted_message = f"{username} :: {message}"
+            await broadcaster.publish(formatted_message)
+    except WebSocketDisconnect:
+        # Отписка и уведомление
+        username = await broadcaster.unsubscribe(ws)
+        await broadcaster.publish(f"{username} :: left the chat")
+    finally:
+        # Если комната пустая — удаляем (опционально, для очистки)
+        if not broadcaster.subscribers:
+            del chat_rooms[chat_name]
