@@ -1,6 +1,5 @@
 from typing import Any, Awaitable, Callable
 import json
-import json
 
 async def application(
         scope: dict[str, Any],
