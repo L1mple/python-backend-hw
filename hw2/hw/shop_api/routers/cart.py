@@ -38,23 +38,11 @@ async def get_cart(cart_id: int):
 async def get_carts(
     offset: Annotated[NonNegativeInt, Query()] = 0,
     limit: Annotated[PositiveInt, Query()] = 10,
-    min_price: int | None = None,
-    max_price: int | None = None,
-    min_quantity: int | None = None,
-    max_quantity: int | None = None,
+    min_price: Annotated[NonNegativeInt, Query()] | None = None,
+    max_price: Annotated[NonNegativeInt, Query()] | None = None,
+    min_quantity: Annotated[NonNegativeInt, Query()] | None = None,
+    max_quantity: Annotated[NonNegativeInt, Query()] | None = None,
     ):
-    if min_price is not None and min_price < 0:
-        return Response("MinPrice must be not negative!", status_code=HTTPStatus.UNPROCESSABLE_ENTITY)
-    
-    if max_price is not None and max_price < 0:
-        return Response("MaxPrice must be not negative!", status_code=HTTPStatus.UNPROCESSABLE_ENTITY)
-    
-    if min_quantity is not None and min_quantity < 0:
-        return Response("MinQuantity must be not negative!", status_code=HTTPStatus.UNPROCESSABLE_ENTITY)
-    
-    if max_quantity is not None and max_quantity < 0:
-        return Response("MaxQuantity must be not negative!", status_code=HTTPStatus.UNPROCESSABLE_ENTITY)
-    
     if min_price is None:
         min_price = 0
     

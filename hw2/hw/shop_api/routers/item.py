@@ -36,17 +36,11 @@ async def get_item(item_id: int):
 async def get_items(
     offset: Annotated[NonNegativeInt, Query()] = 0,
     limit: Annotated[PositiveInt, Query()] = 10,
-    min_price: int | None = None,
-    max_price: int | None = None,
+    min_price: Annotated[NonNegativeInt, Query()] | None = None,
+    max_price: Annotated[NonNegativeInt, Query()] | None = None,
     show_deleted: bool = False):
     items: list = data_storage.get_items()
-    
-    if min_price is not None and min_price < 0:
-        return Response("MinPrice must be not negative!", status_code=HTTPStatus.UNPROCESSABLE_ENTITY)
-    
-    if max_price is not None and max_price < 0:
-        return Response("MaxPrice must be not negative!", status_code=HTTPStatus.UNPROCESSABLE_ENTITY)
-    
+
     if min_price is None:
         min_price = 0
     
