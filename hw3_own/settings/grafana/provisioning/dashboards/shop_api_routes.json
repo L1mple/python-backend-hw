@@ -1,0 +1,51 @@
+{
+    "title": "Shop API — Routes",
+    "schemaVersion": 39,
+    "version": 1,
+    "time": { "from": "now-1h", "to": "now" },
+    "panels": [
+        {
+            "type": "timeseries",
+            "title": "RPS by route",
+            "description": "Если вместо label 'handler' у вас 'path' — замените в expr.",
+            "targets": [
+                {
+                    "expr": "sum by (handler) (rate(http_requests_total[1m]))",
+                    "legendFormat": "{{handler}}"
+                }
+            ],
+            "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 }
+        },
+        {
+            "type": "timeseries",
+            "title": "Latency p95 by route",
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum by (le, handler) (rate(http_request_duration_seconds_bucket[5m])))",
+                    "legendFormat": "p95 {{handler}}"
+                }
+            ],
+            "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 }
+        },
+        {
+            "type": "timeseries",
+            "title": "2xx / 4xx / 5xx by route (5m rate)",
+            "targets": [
+                {
+                    "expr": "sum by (handler) (rate(http_requests_total{status=~\"2..\"}[5m]))",
+                    "legendFormat": "2xx {{handler}}"
+                },
+                {
+                    "expr": "sum by (handler) (rate(http_requests_total{status=~\"4..\"}[5m]))",
+                    "legendFormat": "4xx {{handler}}"
+                },
+                {
+                    "expr": "sum by (handler) (rate(http_requests_total{status=~\"5..\"}[5m]))",
+                    "legendFormat": "5xx {{handler}}"
+                }
+            ],
+            "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
+        }
+    ],
+    "panelsState": {}
+}
