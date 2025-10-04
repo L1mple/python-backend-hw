@@ -3,12 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response, HTTPException, status
 from pydantic import NonNegativeInt, PositiveInt
 
-from shop_api.store.queries import (
-    create_item_record,
-    list_items,
-    patch_item_record,
-    replace_item_record,
-)
+from shop_api.store.queries import create_item_record, list_items, patch_item_record, replace_item_record
 from shop_api.store.models import Item
 from shop_api.api.item.contracts import ItemPostRequest, ItemPutRequest, ItemPatchRequest
 

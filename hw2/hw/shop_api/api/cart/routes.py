@@ -3,10 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response, HTTPException, status
 from pydantic import NonNegativeInt, PositiveInt
 
-from shop_api.store.queries import add_cart_item
-from shop_api.store.queries import create_cart_record
-from shop_api.store.queries import list_carts
-from shop_api.store.queries import list_items
+from shop_api.store.queries import add_cart_item, create_cart_record, list_carts, list_items
 from shop_api.store.models import Cart
 
 
