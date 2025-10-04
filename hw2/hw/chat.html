@@ -1,0 +1,32 @@
+  <!DOCTYPE html>
+  <html>
+  <head><title>Chat Test</title></head>
+  <body>
+      <input id="chatName" placeholder="Chat room name" value="test-room">
+      <button onclick="connect()">Connect</button>
+      <button onclick="disconnect()">Disconnect</button>
+      <br><br>
+      <input id="messageInput" placeholder="Type message">
+      <button onclick="sendMessage()">Send</button>
+      <div id="messages"></div>
+
+      <script>
+          let ws;
+          function connect() {
+              const chatName = document.getElementById('chatName').value;
+              ws = new WebSocket(`ws://localhost:8000/chat/${chatName}`);
+              ws.onmessage = (event) => {
+                  const div = document.createElement('div');
+                  div.textContent = event.data;
+                  document.getElementById('messages').appendChild(div);
+              };
+          }
+          function disconnect() { ws?.close(); }
+          function sendMessage() {
+              const msg = document.getElementById('messageInput').value;
+              ws.send(msg);
+              document.getElementById('messageInput').value = '';
+          }
+      </script>
+  </body>
+  </html>
