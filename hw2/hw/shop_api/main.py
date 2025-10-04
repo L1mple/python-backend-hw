@@ -1,10 +1,12 @@
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Response, status
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from .models import Cart, CartItem, Item, ItemBase, ItemUpdate
 
 app = FastAPI(title='Shop API')
+Instrumentator().instrument(app).expose(app)
 
 item_id_seq = 1
 items_db: dict[int, Item] = {}  # хранение в памяти
