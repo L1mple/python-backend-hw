@@ -7,6 +7,7 @@ from fastapi import (
     Query,
     Response,
 )
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from hw import store
 from .contracts import (
@@ -18,6 +19,7 @@ from .contracts import (
 )
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 
 @app.post("/cart", status_code=HTTPStatus.CREATED)
