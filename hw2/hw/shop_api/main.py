@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, ConfigDict
 from http import HTTPStatus
 from sqlalchemy.orm import Session
@@ -39,7 +39,7 @@ class Item(BaseItem):
     # "deleted": false // удален ли товар, по умолчанию false
 
 
-@app.post("/item")
+@app.post("/item", status_code=HTTPStatus.CREATED)
 def create_new_item(new_item: BaseItem, db_session: Session = Depends(get_db)):
     db_item = db.Item(name=new_item.name, price=new_item.price, deleted=new_item.deleted)
     # 2. Добавляем в сессию
@@ -55,7 +55,7 @@ def create_new_item(new_item: BaseItem, db_session: Session = Depends(get_db)):
 def read_item_by_id(id: int, db_session: Session = Depends(get_db)):
     item = db_session.query(db.Item).filter(db.Item.id == id).first()
     if not item:
-        return HTTPException(HTTPStatus.NOT_FOUND, detail=f"Item with id {id} not found")
+        raise HTTPException(HTTPStatus.NOT_FOUND, detail=f"Item with id {id} not found")
     
     return {
         "id": item.id,
@@ -66,10 +66,10 @@ def read_item_by_id(id: int, db_session: Session = Depends(get_db)):
 
 @app.get("/item")
 def get_items_by_filtering(
-    offset: int = 0,
-    limit: int = 10,
-    min_price: Optional[float] = None,
-    max_price: Optional[float] = None,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, gt=0),
+    min_price: Optional[float] = Query(default=None, ge=0),
+    max_price: Optional[float] = Query(default=None, ge=0),
     show_deleted: bool = False,
     db_session: Session = Depends(get_db)
     ):
@@ -89,7 +89,7 @@ def get_items_by_filtering(
     # 3. Применяем пагинацию
     items = query.offset(offset).limit(limit).all()
 
-    list_items = [{"id": item.id, "name": item.name, "price": item.price, "deleted": item.deleted} for item in items]
+    list_items = [{"id": item.id, "name": item.name, "price": item.price} for item in items]
     
     return list_items
 
@@ -118,15 +118,18 @@ def put_data_by_id(id: int, fixed_item: BaseItem, db_session: Session = Depends(
 
 @app.patch("/item/{id}")
 def patch_item_by_id(id: int, fixed_item: OptionalBaseItem, db_session: Session = Depends(get_db)):
-    if fixed_item.name is None and fixed_item.price is None:
-        return HTTPException(HTTPStatus.BAD_REQUEST)
+    # if fixed_item.name is None and fixed_item.price is None:
+    #     return HTTPException(HTTPStatus.BAD_REQUEST)
     
     # Находим запись по id
     item = db_session.query(db.Item).filter(db.Item.id == id).first()
     
     if not item:
-        raise HTTPException(HTTPStatus.NOT_FOUND, detail=f"Item with id {id} not found")
+        raise HTTPException(HTTPStatus.NOT_MODIFIED, detail=f"Item with id {id} not found")
     
+    if fixed_item.name == item.name and fixed_item.price == item.price:
+        raise HTTPException(HTTPStatus.NOT_MODIFIED)
+
     # Обновляем поля
     if fixed_item.name:
         item.name = fixed_item.name
@@ -143,23 +146,23 @@ def patch_item_by_id(id: int, fixed_item: OptionalBaseItem, db_session: Session 
         "deleted": item.deleted
     }
 
-@app.delete("/item/{id}")
-def delete_item_by_id(id: int, db_session: Session = Depends(get_db)):
+@app.delete("/item/{item_id}")
+def delete_item_by_id(item_id: int, db_session: Session = Depends(get_db)):
      # Находим запись по id
-    item = db_session.query(db.Item).filter(db.Item.id == id).first()
+    item = db_session.query(db.Item).filter(db.Item.id == item_id).first()
     
     if not item:
-        raise HTTPException(HTTPStatus.NOT_FOUND, detail=f"Item with id {id} not found")
+        return {"status": "ok"}
     
     db_session.delete(item)
     db_session.commit()
 
-    return HTTPStatus.OK
+    return {"status": "ok"}
 
 # -------------------------------------------------------------------------------------------
 
-@app.post("/cart")
-def create_new_cart(db_session: Session = Depends(get_db)):
+@app.post("/cart", status_code=HTTPStatus.CREATED)
+def create_new_cart(response: Response, db_session: Session = Depends(get_db)):
     db_item = db.Cart(items=[], price=0)
     # 2. Добавляем в сессию
     db_session.add(db_item)
@@ -167,6 +170,8 @@ def create_new_cart(db_session: Session = Depends(get_db)):
     db_session.commit()
     # 4. Обновляем объект (получаем сгенерированный ID)
     db_session.refresh(db_item)
+    
+    response.headers["location"] = f"/cart/{db_item.id}"
     
     return {"id": db_item.id}
 
@@ -180,12 +185,12 @@ def get_cart_by_id(id: int, db_session: Session = Depends(get_db)):
 
 @app.get("/cart")
 def get_carts_by_filtering(
-    offset: Optional[int] = 0,
-    limit: Optional[int] = 10,
-    min_price: Optional[float] = None,
-    max_price: Optional[float] = None,
-    min_quantity: Optional[int] = None,
-    max_quantity: Optional[int] = None,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=10, gt=0),
+    min_price: Optional[float] = Query(default=None, ge=0),
+    max_price: Optional[float] = Query(default=None, ge=0),
+    min_quantity: Optional[int] = Query(default=None, ge=0),
+    max_quantity: Optional[int] = Query(default=None, ge=0),
     db_session: Session = Depends(get_db)
     ):
     # Базовый запрос
@@ -209,7 +214,7 @@ def get_carts_by_filtering(
 
     return carts
 
-@app.post("/cart/{cart_id}/add/{item_id}")
+@app.post("/cart/{cart_id}/add/{item_id}", status_code=HTTPStatus.CREATED)
 def add_item_to_cart(cart_id: int, item_id: int, db_session: Session = Depends(get_db)):
     # первым делом надо проверить что объекты с такими id вообще есть в базах
     item = db_session.query(db.Item).filter(db.Item.id == item_id).first()

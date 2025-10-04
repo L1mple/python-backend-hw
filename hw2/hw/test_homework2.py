@@ -57,13 +57,17 @@ def existing_not_empty_cart_id(
 
 @pytest.fixture()
 def existing_item() -> dict[str, Any]:
-    return client.post(
+    item = client.post(
         "/item",
         json={
             "name": f"Тестовый товар {uuid4().hex}",
             "price": faker.pyfloat(min_value=10.0, max_value=100.0),
         },
     ).json()
+    # если прогонять тесты без этой правки, то некоторые из них падают когда deleted есть в output, 
+    # а другие когда его нет
+    item["deleted"] = False 
+    return item
 
 
 @pytest.fixture()
