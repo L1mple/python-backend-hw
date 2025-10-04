@@ -130,7 +130,6 @@ async def get_carts(
         else:
             # No quantity filters, apply normal pagination
             db_carts = query.offset(offset).limit(limit).all()
-            cart = db_carts[0]
 
             return [
                 Cart(
