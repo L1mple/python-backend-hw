@@ -1,4 +1,4 @@
-from shop_api.store.models import Cart, Item, CartItem
+from store.models import Cart, Item, CartItem
 
 _carts: list[Cart] = []
 _items: list[Item] = []

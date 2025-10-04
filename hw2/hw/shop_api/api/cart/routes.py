@@ -3,8 +3,8 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response, HTTPException, status
 from pydantic import NonNegativeInt, PositiveInt
 
-from shop_api.store.queries import add_cart_item, create_cart_record, list_carts, list_items
-from shop_api.store.models import Cart
+from store.queries import add_cart_item, create_cart_record, list_carts, list_items
+from store.models import Cart
 
 
 router = APIRouter(prefix="/cart")
