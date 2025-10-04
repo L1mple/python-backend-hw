@@ -4,13 +4,13 @@ _carts: list[Cart] = []
 _items: list[Item] = []
 
 
-def create_cart() -> Cart:
+def create_cart_record() -> Cart:
     cart = Cart(id=len(_carts))
     _carts.append(cart)
     return cart
 
 
-def get_carts(
+def list_carts(
     offset: int = 0,
     limit: int = 10,
     min_price: float | None = None,
@@ -30,7 +30,7 @@ def get_carts(
     ]
 
 
-def get_items(
+def list_items(
     offset: int = 0,
     limit: int = 10,
     min_price: float | None = None,
@@ -47,7 +47,7 @@ def get_items(
     ]
 
 
-def add_item_to_cart(cart: Cart, item: Item) -> None:
+def add_cart_item(cart: Cart, item: Item) -> None:
     for cart_item in cart.items:
         if cart_item.id == item.id:
             cart_item.quantity += 1
@@ -57,19 +57,19 @@ def add_item_to_cart(cart: Cart, item: Item) -> None:
     cart.price += item.price
 
 
-def create_item(name: str, price: float) -> Item:
+def create_item_record(name: str, price: float) -> Item:
     item = Item(id=len(_items), name=name, price=price, deleted=False)
     _items.append(item)
     return item
 
 
-def replace_item(item_id: int, name: str, price: float) -> None:
+def replace_item_record(item_id: int, name: str, price: float) -> None:
     _items[item_id].name = name
     _items[item_id].price = price
     _items[item_id].deleted = False
 
 
-def patch_item(item_id: int, name: str | None, price: float | None) -> None:
+def patch_item_record(item_id: int, name: str | None, price: float | None) -> None:
     if name is not None:
         _items[item_id].name = name
     if price is not None:
