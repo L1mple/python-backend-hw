@@ -12,7 +12,7 @@ router = APIRouter(prefix="/cart", tags=["cart"])
 def post_cart(response: Response) -> Dict[str, int]:
     cid = create_cart()
     response.headers["Location"] = f"/cart/{cid}"
-    return {"id": cid}
+    return {"id": cid} 
 
 
 @router.get("/{cart_id}", response_model=Cart)
