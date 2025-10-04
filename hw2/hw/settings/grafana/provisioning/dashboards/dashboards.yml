@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: shop-dashboards
+    folder: Shop
+    type: file
+    allowUiUpdates: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards
