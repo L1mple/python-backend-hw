@@ -48,8 +48,7 @@ async def chat_ws(ws: WebSocket, room: str):
         pass
     finally:
         stop.set()
-        for task in (ping_task, idle_task):
-            task.cancel()
+        idle_task.cancel()
         await manager.disconnect(room, ws)
         await manager.broadcast(room, ChatSystem(text=f"{username} left").model_dump())
 
