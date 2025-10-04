@@ -84,7 +84,7 @@ def calculate_cart_details(cart_items_dict: Dict[int, int]) -> (List[CartItem], 
 
 
 @app.post("/item", response_model=Item, status_code=HTTPStatus.CREATED)
-def create_item(item: BaseItem):
+async def create_item(item: BaseItem):
     global item_id_counter
     item_id_counter += 1
     new_item = {
@@ -98,12 +98,12 @@ def create_item(item: BaseItem):
 
 
 @app.get("/item/{item_id}", response_model=Item)
-def get_item(item_id: int):
+async def get_item(item_id: int):
     return get_item_or_404(item_id)
 
 
 @app.get("/item", response_model=List[Item])
-def get_item_list(
+async def get_item_list(
     offset: int = Query(0, ge=0),
     limit: int = Query(10, gt=0),
     min_price: Optional[float] = Query(None, ge=0.0),
@@ -123,7 +123,7 @@ def get_item_list(
 
 
 @app.put("/item/{item_id}", response_model=Item)
-def update_item(item_id: int, item_update: ItemUpdate):
+async def update_item(item_id: int, item_update: ItemUpdate):
     """Полное обновление товара по ID."""
     db_item = get_item_or_404(item_id)
 
@@ -132,7 +132,7 @@ def update_item(item_id: int, item_update: ItemUpdate):
 
 
 @app.patch("/item/{item_id}", response_model=Item)
-def partially_update_item(item_id: int, item_update: PartialItemUpdate, response: Response):
+async def partially_update_item(item_id: int, item_update: PartialItemUpdate, response: Response):
     db_item = get_item_or_404(item_id, include_deleted=True)
 
     if db_item["deleted"]:
@@ -148,7 +148,7 @@ def partially_update_item(item_id: int, item_update: PartialItemUpdate, response
 
 
 @app.delete("/item/{item_id}", response_model=Item)
-def delete_item(item_id: int):
+async def delete_item(item_id: int):
     db_item = get_item_or_404(item_id, include_deleted=True)
     db_item["deleted"] = True
     return db_item
@@ -156,7 +156,7 @@ def delete_item(item_id: int):
 
 
 @app.post("/cart", response_model=CartCreated, status_code=HTTPStatus.CREATED)
-def create_cart(response: Response):
+async def create_cart(response: Response):
     global cart_id_counter
     cart_id_counter += 1
     db_carts[cart_id_counter] = {}
@@ -165,14 +165,14 @@ def create_cart(response: Response):
 
 
 @app.get("/cart/{cart_id}", response_model=Cart)
-def get_cart(cart_id: int):
+async def get_cart(cart_id: int):
     cart_items_dict = get_cart_or_404(cart_id)
     items_list, total_price = calculate_cart_details(cart_items_dict)
     return Cart(id=cart_id, items=items_list, price=total_price)
 
 
 @app.get("/cart", response_model=List[Cart])
-def get_cart_list(
+async def get_cart_list(
     offset: int = Query(0, ge=0),
     limit: int = Query(10, gt=0),
     min_price: Optional[float] = Query(None, ge=0.0),
@@ -200,7 +200,7 @@ def get_cart_list(
 
 
 @app.post("/cart/{cart_id}/add/{item_id}", response_model=Cart)
-def add_item_to_cart(cart_id: int, item_id: int):
+async def add_item_to_cart(cart_id: int, item_id: int):
     cart = get_cart_or_404(cart_id)
     _ = get_item_or_404(item_id)  # Проверяем, что товар существует и не удален
 
