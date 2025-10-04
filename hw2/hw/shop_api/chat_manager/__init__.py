@@ -1,0 +1,1 @@
+from shop_api.chat_manager.chat_manager import chat_manager
