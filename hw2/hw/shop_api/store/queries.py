@@ -78,3 +78,28 @@ def patch_item_record(item_id: int, name: str | None, price: float | None) -> No
 
 def delete_item(item_id: int) -> None:
     _items[item_id].deleted = True
+
+
+def compute_store_statistics() -> dict[str, float]:
+    total_carts = len(_carts)
+    total_items = len(_items)
+    deleted_items = sum(1 for item in _items if item.deleted)
+
+    total_price = sum(item.price for item in _items)
+    total_active_price = sum(item.price for item in _items if not item.deleted)
+    active_items = total_items - deleted_items
+
+    average_price = (total_price / total_items) if total_items else 0.0
+    average_active_price = (total_active_price / active_items) if active_items else 0.0
+
+    total_cart_items = sum(len(cart.items) for cart in _carts)
+    average_items_per_cart = (total_cart_items / total_carts) if total_carts else 0.0
+
+    return {
+        "cart_count": float(total_carts),
+        "item_count": float(total_items),
+        "deleted_item_count": float(deleted_items),
+        "average_item_price": average_price,
+        "average_active_item_price": average_active_price,
+        "average_items_per_cart": average_items_per_cart,
+    }
