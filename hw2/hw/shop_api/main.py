@@ -3,8 +3,10 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Annotated, Any
 import random
 import string
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 
 # ============ Data Models ============
