@@ -44,7 +44,7 @@ async def get_cart_by_id(id: int) -> CartResponse:
             HTTPStatus.NOT_FOUND,
             f"Request resource /cart/{id} was not found",
         )
-
+    
     return CartResponse.from_entity(entity)
 
 
@@ -62,7 +62,7 @@ async def post_cart(response: Response) -> CartResponse:
 
 
 @cart_router.post(
-    "/cart/{cart_id}/add/{item_id}",
+    "/{cart_id}/add/{item_id}",
     status_code=HTTPStatus.CREATED,
 )
 async def post_cart_item(cart_id: int, item_id: int) -> CartResponse:
@@ -71,18 +71,18 @@ async def post_cart_item(cart_id: int, item_id: int) -> CartResponse:
     if not entity_cart:
         raise HTTPException(
             HTTPStatus.NOT_FOUND,
-            f"Request resource /cart/{id} was not found",
+            f"Request resource /cart/{cart_id} was not found",
         )
     
 
-    entity_item = store.get_item(id)
+    entity_item = store.get_item(item_id)
 
     if not entity_item:
         raise HTTPException(
             HTTPStatus.NOT_FOUND,
-            f"Request resource /item/{id} was not found",
+            f"Request resource /item/{item_id} was not found",
         )
-    
+ 
     ret_entity_cart = store.add_item_to_cart(cart_id=cart_id, item_id=item_id)
 
     return CartResponse.from_entity(ret_entity_cart)

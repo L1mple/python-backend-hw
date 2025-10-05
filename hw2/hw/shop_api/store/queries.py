@@ -22,11 +22,13 @@ def int_id_generator() -> Iterable[int]:
         i += 1
 
 
-_id_generator = int_id_generator()
+_item_id_generator = int_id_generator()
+
+_cart_id_generator = int_id_generator()
 
 
 def add_item(info: ItemInfo) -> ItemEntity:
-    _id = next(_id_generator)
+    _id = next(_item_id_generator)
     _items_data[_id] = info
 
     return ItemEntity(_id, info)
@@ -99,7 +101,6 @@ def get_carts(
         max_quantity: int | None = None
     ) -> Iterable[CartEntity]:
     curr = 0
-    # returned_carts_cnt = 0
     for id, info in _carts_data.items():
         cart_items_quantity = 0
         for cart_item in info.items:
@@ -109,15 +110,10 @@ def get_carts(
             (max_price == None or info.price <= max_price) and \
             (min_quantity == None or cart_items_quantity >= min_quantity) and \
             (max_quantity == None or cart_items_quantity <= max_quantity):
-            # returned_carts_cnt += 1
             yield CartEntity(id, info)
 
         curr += 1
 
-    # if min_quantity != None and returned_carts_cnt < min_quantity:
-    #     while returned_carts_cnt < min_quantity:
-    #         returned_carts_cnt += 1
-    #         yield CartEntity(0, CartInfo(items=[], price=0.0))
 
 
 def get_cart(id: int) -> CartEntity | None:
@@ -128,24 +124,23 @@ def get_cart(id: int) -> CartEntity | None:
 
 
 def add_cart() -> CartEntity:
-    _id = next(_id_generator)
+    _id = next(_cart_id_generator)
     info = CartInfo(items=[], price=0.0)
     _carts_data[_id] = info
     return CartEntity(_id, info)
 
 
 def add_item_to_cart(cart_id: int, item_id: int) -> CartEntity:
-    cart_entity = get_cart(cart_id)
     is_found_item = False
-    for cart_item in cart_entity.info.items:
+    item_info = _items_data[item_id]
+    for cart_item in _carts_data[cart_id].items:
         if cart_item.id == item_id:
-            cart_item.info.quantity += 1
+            cart_item.quantity += 1
             is_found_item = True
             break
     if not is_found_item:
-        item_info = _items_data[item_id]
-        cart_entity.info.items.append(CartItemInfo(id=item_id, name=item_info.name, quantity=1, available=not item_info.deleted))
-        # _carts_data[cart_id].items.append(CartItemInfo(id=item_id, name=item_info.name, quantity=1, available=not item_info.deleted))
+        _carts_data[cart_id].items.append(CartItemInfo(id=item_id, name=item_info.name, quantity=1, available=not item_info.deleted))
+    
+    _carts_data[cart_id].price += item_info.price
 
-    _carts_data[cart_id] = cart_entity.info
-    return cart_entity
+    return get_cart(cart_id)
