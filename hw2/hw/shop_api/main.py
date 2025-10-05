@@ -280,7 +280,7 @@ class Broadcaster:
         """Подписка клиента, присвоение имени"""
         await ws.accept()
         self.subscribers.append(ws)
-        username = uuid4().hex[:8]  # Случайное имя (первые 8 символов uuid)
+        username = f"User_{uuid4().hex[:4]}"  # случайное имя типа User_a1b2
         self.usernames[ws] = username
         return username
 
@@ -292,10 +292,21 @@ class Broadcaster:
             return username
         return "unknown"
 
-    async def publish(self, message: str) -> None:
-        """Broadcast сообщения в комнату"""
+    async def publish(
+        self, message: str, exclude_ws: Optional[WebSocket] = None
+    ) -> None:
+        """Broadcast сообщения в комнату, исключая exclude_ws"""
+        dead_ws = []
         for ws in self.subscribers:
-            await ws.send_text(message)
+            if ws == exclude_ws:
+                continue
+            try:
+                await ws.send_text(message)
+            except Exception:
+                dead_ws.append(ws)
+        # Удаляем мертвые соединения
+        for dead in dead_ws:
+            await self.unsubscribe(dead)
 
 
 # Хранение комнат для чата (stateful, в памяти)
@@ -310,22 +321,29 @@ async def ws_chat(ws: WebSocket, chat_name: str):
         chat_rooms[chat_name] = Broadcaster()
     broadcaster = chat_rooms[chat_name]
 
-    # Подписка и отправка приветствия
+    # Подписка и отправка приветствия (всем, кроме самого)
     username = await broadcaster.subscribe(ws)
-    await broadcaster.publish(f"{username} :: joined the chat")
+    await broadcaster.publish(f"{username} :: joined the chat", exclude_ws=ws)
 
     try:
         while True:
             # Получаем сообщение от клиента
             message = await ws.receive_text()
-            # Форматируем и broadcast
+            message = message.strip()
+            if not message:  # Пропускаем пустые сообщения
+                continue
+            # Форматируем и broadcast (исключая отправителя)
             formatted_message = f"{username} :: {message}"
-            await broadcaster.publish(formatted_message)
+            await broadcaster.publish(formatted_message, exclude_ws=ws)
     except WebSocketDisconnect:
-        # Отписка и уведомление
+        # Отписка и уведомление (всем)
         username = await broadcaster.unsubscribe(ws)
         await broadcaster.publish(f"{username} :: left the chat")
+    except Exception as e:
+        # Обработка других ошибок (для стабильности)
+        await broadcaster.unsubscribe(ws)
+        await broadcaster.publish(f"{username} :: disconnected unexpectedly")
     finally:
-        # Если комната пустая — удаляем (опционально, для очистки)
+        # Если комната пустая — удаляем
         if not broadcaster.subscribers:
             del chat_rooms[chat_name]
