@@ -226,11 +226,10 @@ manager = ConnectionManager()
 
 @app.websocket("/chat/{chat_name}")
 async def chat_endpoint(websocket: WebSocket, chat_name: str):
-    # username = await manager.connect(chat_name, websocket)
+    username = await manager.connect(chat_name, websocket)
     try:
         while True:
             data = await websocket.receive_text()
-            # Broadcast to others in the same chat
             await manager.broadcast(chat_name, data, websocket)
     except WebSocketDisconnect:
         manager.disconnect(chat_name, websocket)
