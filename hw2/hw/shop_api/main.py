@@ -3,7 +3,15 @@ from http import HTTPStatus
 from threading import Lock
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import BaseModel, ConfigDict
 
 app = FastAPI(title="Shop API")
@@ -57,10 +65,14 @@ def _compute_cart(cart_id: int) -> Cart:
     for item_id, qty in items_map.items():
         item = _items.get(item_id)
         if not item:
-            items_list.append(CartItem(id=item_id, name="<unknown>", quantity=qty, available=False))
+            items_list.append(
+                CartItem(id=item_id, name="<unknown>", quantity=qty, available=False)
+            )
             continue
         available = not item.deleted
-        items_list.append(CartItem(id=item.id, name=item.name, quantity=qty, available=available))
+        items_list.append(
+            CartItem(id=item.id, name=item.name, quantity=qty, available=available)
+        )
         if available:
             total_price += item.price * qty
     return Cart(id=cart_id, items=items_list, price=total_price)
@@ -155,10 +167,10 @@ def get_cart(id: int):
 def list_carts(
     offset: int = Query(0, ge=0),
     limit: int = Query(10, gt=0),
-    min_price: Optional[float] = Query(None, ge=0),  # 👈 вот здесь
-    max_price: Optional[float] = Query(None, ge=0),  # 👈 и здесь
-    min_quantity: Optional[int] = Query(None, ge=0),  # 👈 и тут
-    max_quantity: Optional[int] = Query(None, ge=0),  # 👈 и тут
+    min_price: Optional[float] = Query(None, ge=0),
+    max_price: Optional[float] = Query(None, ge=0),
+    min_quantity: Optional[int] = Query(None, ge=0),
+    max_quantity: Optional[int] = Query(None, ge=0),
 ):
     carts = []
     for cart_id in sorted(_carts.keys()):
