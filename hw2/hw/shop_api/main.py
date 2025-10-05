@@ -85,8 +85,8 @@ def get_item(id: int):
 def list_items(
     offset: int = Query(0, ge=0),
     limit: int = Query(10, gt=0),
-    min_price: Optional[float] = None,
-    max_price: Optional[float] = None,
+    min_price: Optional[float] = Query(None, ge=0),
+    max_price: Optional[float] = Query(None, ge=0),
     show_deleted: bool = False,
 ):
     items = list(_items.values())
@@ -149,10 +149,10 @@ def get_cart(id: int):
 def list_carts(
     offset: int = Query(0, ge=0),
     limit: int = Query(10, gt=0),
-    min_price: Optional[float] = None,
-    max_price: Optional[float] = None,
-    min_quantity: Optional[int] = None,
-    max_quantity: Optional[int] = None,
+    min_price: Optional[float] = Query(None, ge=0),  # 👈 вот здесь
+    max_price: Optional[float] = Query(None, ge=0),  # 👈 и здесь
+    min_quantity: Optional[int] = Query(None, ge=0),  # 👈 и тут
+    max_quantity: Optional[int] = Query(None, ge=0),  # 👈 и тут
 ):
     carts = []
     for cart_id in sorted(_carts.keys()):
