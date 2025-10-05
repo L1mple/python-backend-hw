@@ -37,7 +37,11 @@ def get_item(id: int) -> ItemEntity | None:
 
 
 def get_many_items(
-    offset: int = 0, limit: int = 10, min_price: float = None, max_price: float = None
+    offset: int = 0,
+    limit: int = 10,
+    min_price: float = None,
+    max_price: float = None,
+    show_deleted: bool = False,
 ) -> Iterable[ItemEntity]:
     curr = 0
     for id, info in _data["items"].items():
@@ -45,6 +49,8 @@ def get_many_items(
             if min_price is not None and info.price < min_price:
                 continue
             if max_price is not None and info.price > max_price:
+                continue
+            if not show_deleted and info.deleted:
                 continue
             yield ItemEntity(id, info)
         curr += 1
@@ -100,10 +106,13 @@ def get_many_carts(
 ) -> Iterable[CartEntity]:
     curr = 0
     for id, info in _data["carts"].items():
+        cart_price = 0.0
+        for item in info.items:
+            cart_price += _data["items"][item.item_id].price * item.quantity
         if offset <= curr < offset + limit:
-            if min_price is not None and info.price < min_price:
+            if min_price is not None and cart_price < min_price:
                 continue
-            if max_price is not None and info.price > max_price:
+            if max_price is not None and cart_price > max_price:
                 continue
             if min_quantity is not None and len(info.items) < min_quantity:
                 continue
