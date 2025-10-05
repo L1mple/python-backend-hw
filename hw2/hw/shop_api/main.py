@@ -1,6 +1,15 @@
+import random
+import string
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Response, status
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 app = FastAPI(title="Shop API")
@@ -32,6 +41,97 @@ items_db: Dict[int, Item] = {}
 carts_db: Dict[int, Cart] = {}
 next_item_id = 1
 next_cart_id = 1
+
+
+# WebSocket Chat Manager
+class ConnectionManager:
+    """Управляет WebSocket соединениями для разных комнат чата"""
+
+    def __init__(self):
+        # Словарь: chat_name -> список кортежей (websocket, username)
+        self.active_connections: Dict[str, List[tuple[WebSocket, str]]] = {}
+
+    def generate_username(self) -> str:
+        """Генерирует случайное имя пользователя"""
+        adjectives = [
+            "Fast",
+            "Brave",
+            "Smart",
+            "Cool",
+            "Swift",
+            "Bold",
+            "Bright",
+            "Quick",
+        ]
+        nouns = ["Tiger", "Eagle", "Wolf", "Lion", "Hawk", "Bear", "Fox", "Dragon"]
+        number = "".join(random.choices(string.digits, k=3))
+        return f"{random.choice(adjectives)}{random.choice(nouns)}{number}"
+
+    async def connect(self, websocket: WebSocket, chat_name: str) -> str:
+        """Подключает пользователя к комнате и возвращает его username"""
+        await websocket.accept()
+        username = self.generate_username()
+
+        if chat_name not in self.active_connections:
+            self.active_connections[chat_name] = []
+
+        self.active_connections[chat_name].append((websocket, username))
+        return username
+
+    def disconnect(self, websocket: WebSocket, chat_name: str):
+        """Отключает пользователя от комнаты"""
+        if chat_name in self.active_connections:
+            self.active_connections[chat_name] = [
+                (ws, user)
+                for ws, user in self.active_connections[chat_name]
+                if ws != websocket
+            ]
+            # Удаляем комнату, если она пустая
+            if not self.active_connections[chat_name]:
+                del self.active_connections[chat_name]
+
+    async def broadcast(self, message: str, chat_name: str, sender_username: str):
+        """Отправляет сообщение всем пользователям в комнате"""
+        if chat_name not in self.active_connections:
+            return
+
+        formatted_message = f"{sender_username} :: {message}"
+
+        # Список соединений для удаления (если возникнут ошибки)
+        to_remove = []
+
+        for websocket, username in self.active_connections[chat_name]:
+            try:
+                await websocket.send_text(formatted_message)
+            except Exception:
+                # Соединение разорвано, помечаем для удаления
+                to_remove.append(websocket)
+
+        # Удаляем проблемные соединения
+        for ws in to_remove:
+            self.disconnect(ws, chat_name)
+
+
+manager = ConnectionManager()
+
+
+# WebSocket endpoint для чата
+@app.websocket("/chat/{chat_name}")
+async def websocket_chat_endpoint(websocket: WebSocket, chat_name: str):
+    """WebSocket endpoint для чата с поддержкой комнат"""
+    username = await manager.connect(websocket, chat_name)
+
+    try:
+        while True:
+            # Получаем текстовое сообщение от клиента
+            message = await websocket.receive_text()
+
+            # Broadcast сообщение всем в комнате
+            await manager.broadcast(message, chat_name, username)
+
+    except WebSocketDisconnect:
+        # Пользователь отключился
+        manager.disconnect(websocket, chat_name)
 
 
 # Вспомогательные функции
