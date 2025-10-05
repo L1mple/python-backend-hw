@@ -4,7 +4,7 @@ from threading import Lock
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 app = FastAPI(title="Shop API")
 
@@ -17,6 +17,8 @@ class ItemCreate(BaseModel):
 class ItemPatch(BaseModel):
     name: Optional[str] = None
     price: Optional[float] = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class Item(BaseModel):
@@ -77,7 +79,9 @@ def create_item(item: ItemCreate):
 def get_item(id: int):
     item = _items.get(id)
     if not item:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="Item not found")
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Item not found")
+    if item.deleted:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Item deleted")
     return item
 
 
@@ -115,6 +119,8 @@ def patch_item(id: int, item: ItemPatch):
     existing = _items.get(id)
     if not existing:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail="Item not found")
+    if existing.deleted:
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
     if item.name is not None:
         existing.name = item.name
     if item.price is not None:
