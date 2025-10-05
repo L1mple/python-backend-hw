@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Response, HTTPException, status
-from pydantic import BaseModel, conint, confloat, Extra
+from pydantic import BaseModel, conint, confloat
 
 app = FastAPI(title="Shop API")
 cart_id_counter = 0
