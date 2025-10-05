@@ -13,6 +13,10 @@ class Item(BaseModel):
     price: float = Field(gt=0)
     deleted: bool = False
 
+class ItemForCreateUpd(BaseModel):
+    name: str
+    price: float = Field(gt=0)
+
 class ItemForPatch(BaseModel):
     name: Optional[str] = None
     price: Optional[float] = Field(None, gt=0)
@@ -31,9 +35,10 @@ class Cart(BaseModel):
 
 
 #Работа с товарами
+#----------------------------------
 
 @app.post("/item", response_model=Item, status_code=201)
-def create_item(item: Item):
+def create_item(item: ItemForCreateUpd):
     if items_storage:
         id = max(items_storage.keys()) + 1
     else:
@@ -43,7 +48,7 @@ def create_item(item: Item):
     return items_storage[id]
 
 @app.put("/item/{id}", response_model=Item)
-def put_item(id: int, item: Item):
+def put_item(id: int, item: ItemForCreateUpd):
     if id not in items_storage:
         return {"error": "Item not found"}
     stored_item = items_storage[id]
@@ -104,6 +109,7 @@ def patch_item(id: int, item: ItemForPatch):
 
 
 #Работа с корзиной
+#----------------------------------
 
 @app.post("/cart", status_code=201)
 def post_cart(response: Response):
@@ -130,13 +136,12 @@ def get_carts(
     max_quantity: Optional[int] = Query(None, ge=0),
 ):
     all_carts = list(carts_storage.values())
-    
     filtered_carts = []
     
     for cart in all_carts:
         cart_items = []
-        total_price = 0.0
         total_quantity = 0
+        total_price = 0
         
         for item_id, quantity in cart["items"].items():
             item = items_storage.get(item_id)
@@ -151,13 +156,14 @@ def get_carts(
                 if available:
                     total_price += item.price * quantity
                 total_quantity += quantity
-        if min_price is not None and total_price < min_price:
-            continue
-        if max_price is not None and total_price > max_price:
-            continue
+        
         if min_quantity is not None and total_quantity < min_quantity:
             continue
         if max_quantity is not None and total_quantity > max_quantity:
+            continue
+        if min_price is not None and total_price < min_price:
+            continue
+        if max_price is not None and total_price > max_price:
             continue
 
         filtered_carts.append({
@@ -175,7 +181,7 @@ def get_cart_id(id: int):
     
     cart = carts_storage[id]
     cart_items = []
-    total_price = 0.0
+    total_price = 0
     
     for item_id, quantity in cart["items"].items():
         item = items_storage.get(item_id)
@@ -208,11 +214,10 @@ def add_item_to_cart(cart_id: int, item_id: int):
     if item_id in cart["items"]:
         cart["items"][item_id] += 1
     else:
-
         cart["items"][item_id] = 1
 
     cart_items = []
-    total_price = 0.0
+    total_price = 0
     
     for item_id_in_cart, quantity in cart["items"].items():
         item = items_storage[item_id_in_cart]
