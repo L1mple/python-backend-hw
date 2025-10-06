@@ -15,8 +15,7 @@ Instrumentator().instrument(app).expose(app)
 def maybe_raise_random_error():
     if random.random() < 0.1:
         raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            detail="Random error occurred"
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="Random error occurred"
         )
 
 

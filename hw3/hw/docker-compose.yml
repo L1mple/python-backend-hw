@@ -1,0 +1,47 @@
+services:
+
+  fastapi-app:
+    hostname: fastapi-app
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: dev
+    restart: unless-stopped
+    ports:
+      - 8000:8000
+    networks:
+      - python-backend-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 3000:3000
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./settings/grafana/provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./settings/grafana/provisioning/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yaml:ro
+      - ./settings/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    restart: unless-stopped
+    networks:
+      - python-backend-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./settings/prometheus/:/etc/prometheus/
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - 9090:9090
+    networks: 
+      - python-backend-network
+    restart: unless-stopped
+
+networks:
+  python-backend-network:
+    driver: bridge
