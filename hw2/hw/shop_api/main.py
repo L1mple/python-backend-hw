@@ -7,6 +7,7 @@ import sys
 import fastapi
 import pydantic
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 
 
 VERSION = "1.0.0"
@@ -27,3 +28,6 @@ print("=" * 60)
 
 app = FastAPI(title="Shop API", lifespan=lifespan)
 app.include_router(router)
+
+
+Instrumentator().instrument(app).expose(app)
