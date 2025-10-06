@@ -1,9 +1,12 @@
 from typing import Dict, Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, ConfigDict
 
 app = FastAPI(title="Shop API")
+
+Instrumentator().instrument(app).expose(app)
 
 class ItemDTO(BaseModel):
     name: str
