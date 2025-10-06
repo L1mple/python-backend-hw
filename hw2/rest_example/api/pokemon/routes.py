@@ -91,7 +91,7 @@ async def patch_pokemon(id: int, info: PatchPokemonRequest) -> PokemonResponse:
         HTTPStatus.NOT_MODIFIED: {
             "description": "Failed to modify pokemon as one was not found",
         },
-    }
+    },
 )
 async def put_pokemon(
     id: int,
