@@ -1,5 +1,6 @@
 from http import HTTPStatus
 from typing import Annotated
+import asyncio
 
 from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import Field
@@ -15,6 +16,13 @@ from .contracts import (
 
 cart_router = APIRouter(prefix="/cart")
 item_router = APIRouter(prefix="/item")
+
+
+@item_router.get("/slow")
+async def slow_endpoint(delay: Annotated[float, Query(ge=0, le=30)] = 5.0):
+    """Slow endpoint for testing Active Connections metric (delays response)."""
+    await asyncio.sleep(delay)
+    return {"message": f"Delayed response after {delay}s"}
 
 
 @cart_router.post(
