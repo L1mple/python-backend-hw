@@ -10,7 +10,7 @@ Base = declarative_base()
 
 
 class Item(BaseModel):
-    id: Optional[int | None] = None
+    id: Optional[int] = None
     name: str
     price: float
     deleted: Optional[bool] = False
@@ -32,7 +32,7 @@ class CartItem(BaseModel):
 class Cart(BaseModel):
     id: int
     items: List[CartItem] = []
-    price: float | None = 0
+    price: float = 0
 
 
 # First, create the DBItem model

@@ -9,7 +9,9 @@ from http import HTTPStatus
 from sqlalchemy.orm.attributes import flag_modified
 from fastapi.responses import JSONResponse
 from http import HTTPStatus
+from prometheus_fastapi_instrumentator import Instrumentator
 
+import random 
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./shop.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
@@ -18,9 +20,15 @@ Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 all_catrs = []
-
+def maybe_raise_random_error():
+    if random.random() < 0.1:
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            detail="Random error occurred"
+        )
 
 @app.post("/cart")
 async def create_cart():
@@ -85,6 +93,7 @@ async def get_carts(
     ),
 ):
     db = SessionLocal()
+    maybe_raise_random_error()
     try:
         query = db.query(DBCart)
 
@@ -260,6 +269,7 @@ async def create_item(item: Item):
 # GET /item/{id} - получение товара по id
 @app.get("/item/{item_id}", response_model=Item)
 async def get_item(item_id: int):
+    maybe_raise_random_error()
     db = SessionLocal()
     try:
         db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
