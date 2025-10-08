@@ -1,23 +1,17 @@
-FROM python:3.12 AS base
+FROM python:3.12-slim
 
-ARG PYTHONFAULTHANDLER=1 \
+ENV PYTHONFAULTHANDLER=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONHASHSEED=random \
     PIP_NO_CACHE_DIR=on \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PIP_DEFAULT_TIMEOUT=500
 
-RUN apt-get update && apt-get install -y gcc
-RUN python -m pip install --upgrade pip
+WORKDIR /app
 
-WORKDIR $APP_ROOT/src
-COPY . ./
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-ENV VIRTUAL_ENV=$APP_ROOT/src/.venv \
-    PATH=$APP_ROOT/src/.venv/bin:$PATH
+COPY ./shop_api /app/shop_api
 
-RUN pip install -r requirements.txt
-
-FROM base as local
-
-CMD ["uvicorn", "demo_service.api:app", "--port", "8080", "--host", "0.0.0.0"]
+CMD ["uvicorn", "shop_api.main:app", "--host", "0.0.0.0", "--port", "8090"]

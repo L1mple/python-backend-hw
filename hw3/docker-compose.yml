@@ -2,20 +2,25 @@ version: "3"
 
 services:
 
-  local:
+  shop-api:
     build:
       context: .
-      dockerfile: ./Dockerfile
-      target: local
+      dockerfile: Dockerfile
+    container_name: shop-api
     restart: always
     ports:
-      - 8080:8080
+      - "8090:8090"
+    networks:
+    - monitoring-net
+     
 
   grafana:
     image: grafana/grafana:latest
     ports:
       - 3000:3000
     restart: always
+    networks:
+      - monitoring-net
 
   prometheus:
     image: prom/prometheus
@@ -29,3 +34,9 @@ services:
     ports:
       - 9090:9090
     restart: always
+    networks:
+      - monitoring-net
+
+networks:
+  monitoring-net:
+    driver: bridge
