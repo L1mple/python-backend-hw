@@ -4,8 +4,10 @@ import uvicorn
 import json
 import os
 from http import HTTPStatus
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 carts_file = "carts.json"
 items_file = "items.json"
@@ -312,4 +314,4 @@ def delete_item(item_id: int):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
