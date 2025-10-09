@@ -4,9 +4,11 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict
 from http import HTTPStatus
 from typing_extensions import Annotated
+from prometheus_fastapi_instrumentator import Instrumentator
+
 
 app = FastAPI(title="Shop API")
-
+Instrumentator().instrument(app).expose(app)
 
 # ------------------ MODELS ------------------ #
 class ItemBase(BaseModel):

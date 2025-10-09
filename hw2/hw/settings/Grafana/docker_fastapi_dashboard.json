@@ -1,0 +1,145 @@
+{
+  "id": null,
+  "uid": "docker-fastapi-dashboard",
+  "title": "Docker + FastAPI Monitoring Dashboard",
+  "tags": [
+    "docker",
+    "fastapi",
+    "prometheus"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "row",
+      "title": "\ud83e\udde9 Docker Containers Overview",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "CPU Usage per Container (%)",
+      "type": "graph",
+      "datasource": "prometheus",
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{image!=\"\"}[1m]) * 100",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Memory Usage per Container (MB)",
+      "type": "graph",
+      "datasource": "prometheus",
+      "targets": [
+        {
+          "expr": "container_memory_usage_bytes{image!=\"\"} / 1024 / 1024",
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Network I/O per Container",
+      "type": "graph",
+      "datasource": "prometheus",
+      "targets": [
+        {
+          "expr": "rate(container_network_receive_bytes_total{image!=\"\"}[1m])",
+          "legendFormat": "{{name}} RX"
+        },
+        {
+          "expr": "rate(container_network_transmit_bytes_total{image!=\"\"}[1m])",
+          "legendFormat": "{{name}} TX"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "type": "row",
+      "title": "\ud83d\ude80 FastAPI Application Metrics",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "HTTP Requests per Second",
+      "type": "graph",
+      "datasource": "prometheus",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[1m])",
+          "legendFormat": "{{method}} {{path}}"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "Response Latency (seconds)",
+      "type": "graph",
+      "datasource": "prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1m])) by (le))",
+          "legendFormat": "95th percentile"
+        }
+      ],
+      "gridPos": {
+        "x": 12,
+        "y": 20,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "title": "HTTP Error Rate (4xx / 5xx)",
+      "type": "graph",
+      "datasource": "prometheus",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total{status=~\"4..\"}[1m])",
+          "legendFormat": "4xx errors"
+        },
+        {
+          "expr": "rate(http_requests_total{status=~\"5..\"}[1m])",
+          "legendFormat": "5xx errors"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 8
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  }
+}
