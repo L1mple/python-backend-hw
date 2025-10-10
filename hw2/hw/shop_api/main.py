@@ -1,6 +1,6 @@
 from typing import Optional, List, Tuple
 from decimal import Decimal
-from fastapi import FastAPI, Depends, HTTPException, Query, status, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, Query, status, Response, WebSocket, WebSocketDisconnect, Request
 from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import (
     create_engine, Integer, String, DECIMAL, Boolean,
@@ -10,10 +10,12 @@ from sqlalchemy.orm import (
     DeclarativeBase, Mapped, mapped_column, Session, sessionmaker, relationship
 )
 from faker import Faker
+import time
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 
 # ---------- DB setup ----------
-DATABASE_URL = "sqlite:///./shop.db"
+DATABASE_URL = "sqlite:////tmp/shop.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
@@ -79,8 +81,34 @@ class CartOut(BaseModel):
     items: List[CartItemOut]
     price: float
 
+# ---------- PROMETHEUS METRICS ----------
+request_count = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status_code"])
+request_duration = Histogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
+
 # ---------- APP ----------
 app = FastAPI(title="Shop API")
+
+@app.middleware("http")
+async def prometheus_middleware(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+
+    method = request.method
+    # ключ: берём шаблон пути, а не фактический URL
+    route = request.scope.get("route")
+    endpoint = getattr(route, "path", request.url.path)
+
+    status_code = str(response.status_code)
+
+    request_count.labels(method=method, endpoint=endpoint, status_code=status_code).inc()
+    request_duration.labels(method=method, endpoint=endpoint).observe(process_time)
+
+    return response
+
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # ---------- /item ----------
 @app.post("/item", response_model=ItemOut, status_code=status.HTTP_201_CREATED)
