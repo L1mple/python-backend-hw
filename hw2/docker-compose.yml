@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  shop-api:
+    build:
+      context: ..
+      dockerfile: hw2/Dockerfile
+    image: shop-api:latest
+    container_name: shop-api
+    environment:
+      - PYTHONPATH=/app/hw2/hw
+    ports:
+      - "8000:8000"
+    networks:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - monitoring
+    depends_on:
+      - shop-api
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+
+networks:
+  monitoring:
+    driver: bridge
+
+

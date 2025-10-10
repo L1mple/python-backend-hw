@@ -7,12 +7,15 @@ from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.params import Query
 from fastapi.responses import JSONResponse
 
-
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+except Exception:  
+    Instrumentator = None  
 app = FastAPI(title="Shop API")
-
+if Instrumentator is not None:
+    Instrumentator().instrument(app).expose(app)
 items_storage: Dict[int, Dict[str, Any]] = {}
 carts_storage: Dict[int, Dict[str, Any]] = {}
-
 _next_item_id: int = 1
 _next_cart_id: int = 1
 
