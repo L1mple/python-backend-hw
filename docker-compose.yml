@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    environment:
+      - PYTHONPATH=/app/hw
+    ports:
+      - "8000:8000"
+    networks:
+      - monitor-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - monitor-net
+    depends_on:
+      - app
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - monitor-net
+    depends_on:
+      - prometheus
+
+volumes:
+  prom-data:
+  grafana-data:
+
+networks:
+  monitor-net:
+    driver: bridge
