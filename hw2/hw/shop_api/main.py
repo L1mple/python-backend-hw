@@ -4,10 +4,18 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
+from prometheus_fastapi_instrumentator import Instrumentator
 from fastapi.params import Query
 from fastapi.responses import JSONResponse
 
 app = FastAPI(title="Shop API")
+# Expose Prometheus metrics at `/metrics` and instrument default handlers
+Instrumentator().instrument(app).expose(app)
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
 
 
 # In-memory storage

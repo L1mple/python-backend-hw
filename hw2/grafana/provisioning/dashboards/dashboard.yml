@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Shop API Dashboards
+    orgId: 1
+    folder: Shop API
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+    updateIntervalSeconds: 30
+

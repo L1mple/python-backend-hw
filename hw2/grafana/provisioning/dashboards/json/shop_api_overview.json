@@ -1,0 +1,58 @@
+{
+  "title": "Shop API Overview",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "RPS",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "sum(rate(http_requests_total{job=\"shop-api\"}[1m]))", "legendFormat": "rps"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p50/p90/p99 (s)",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "histogram_quantile(0.5, sum(rate(http_request_duration_seconds_bucket{job=\"shop-api\"}[1m])) by (le))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.9, sum(rate(http_request_duration_seconds_bucket{job=\"shop-api\"}[1m])) by (le))", "legendFormat": "p90"},
+        {"expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"shop-api\"}[1m])) by (le))", "legendFormat": "p99"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx Error Rate",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "sum(rate(http_requests_total{job=\"shop-api\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total{job=\"shop-api\"}[5m])), 1)", "legendFormat": "error_ratio"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "In-flight Requests",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "sum(http_requests_in_progress{job=\"shop-api\"})", "legendFormat": "in_flight"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container CPU (cores)",
+      "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "sum(rate(container_cpu_usage_seconds_total{container=\"shop_api\"}[1m]))", "legendFormat": "cpu"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container Memory (bytes)",
+      "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+      "targets": [
+        {"expr": "sum(container_memory_usage_bytes{container=\"shop_api\"})", "legendFormat": "mem"}
+      ]
+    }
+  ],
+  "schemaVersion": 36,
+  "version": 1
+}
+
