@@ -4,8 +4,10 @@ from typing import List, Dict, Optional, Any
 import uuid
 import random
 import decimal
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 
 class ItemInCart(BaseModel):
