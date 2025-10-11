@@ -2,12 +2,75 @@ import http
 from typing import Annotated, List
 from fastapi import FastAPI, HTTPException, Query, Response
 
-from shop_api.models import Cart, CartResponse, CreateItemRequest, GeneratedID, GetCartsRequest, GetItemsRequest, Item, UpdateItemRequest
-from shop_api.database import  Shop
+from .models import Cart, CartResponse, CreateItemRequest, GeneratedID, GetCartsRequest, GetItemsRequest, Item, UpdateItemRequest
+from .database import  Shop
 
 
 app = FastAPI(title="Shop API")
 shop = Shop()
+
+import http
+from typing import Annotated, List
+from fastapi import FastAPI, HTTPException, Query, Response
+from prometheus_client import Counter, Histogram, Gauge
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_fastapi_instrumentator.metrics import (
+    latency,
+    requests,
+    response_size,
+    default
+)
+
+
+from .models import Cart, GeneratedID, GetCartsRequest, GetItemsRequest, Item, UpdateItemRequest
+from.database import Shop
+
+app = FastAPI(title="Shop API")
+shop = Shop()
+
+REQUEST_COUNT = Counter(
+    'app_request_count_total', 
+    'Total number of HTTP requests', 
+    ['method', 'endpoint', 'status_code']
+)
+
+REQUEST_DURATION = Histogram(
+    'app_request_duration_seconds',
+    'HTTP request duration in seconds',
+    ['method', 'endpoint']
+)
+
+ACTIVE_CARTS = Gauge('app_active_carts', 'Number of active shopping carts')
+ITEMS_COUNT = Gauge('app_items_count', 'Total number of items in the shop')
+CART_PRICE_SUM = Gauge('app_cart_price_sum', 'Total price of all carts')
+
+def update_business_metrics():
+    """Обновляем кастомные бизнес-метрики"""
+    ACTIVE_CARTS.set(len(shop.carts))
+    ITEMS_COUNT.set(len(shop.items))
+
+instrumentator = Instrumentator()
+
+instrumentator.add(
+    default()
+).add(
+    latency(
+        buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]
+    )
+).add(
+    requests()
+).add(
+    response_size()
+)
+
+instrumentator.instrument(app).expose(app)
+
+@app.middleware("http")
+async def update_metrics_middleware(request, call_next):
+    response = await call_next(request)
+    update_business_metrics()
+    return response
+
 
 @app.get("/cart/{cart_id}")
 async def get_cart(cart_id: int) -> CartResponse:

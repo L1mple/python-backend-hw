@@ -1,4 +1,4 @@
-from shop_api.models import Cart, Item
+from .models import Cart, Item
 
 class Shop:
     def __init__(self):
