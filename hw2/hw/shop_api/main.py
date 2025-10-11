@@ -3,9 +3,12 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from http import HTTPStatus
 import random 
-import string
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+
+instrumentator = Instrumentator()
+instrumentator.instrument(app).expose(app)
 
 class ItemCreate(BaseModel):
     name: str
@@ -54,6 +57,9 @@ def generate_username():
     number = random.randint(100, 999)
     return f"{random.choice(adjectives)}{random.choice(nouns)}{number}"
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
 
 
 @app.post("/item", status_code=HTTPStatus.CREATED, response_model=Item)
