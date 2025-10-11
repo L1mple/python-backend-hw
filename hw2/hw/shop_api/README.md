@@ -6,11 +6,19 @@
 
 # 🔹 Запустить сервер
 
-## Для Windows PowerShell
+## Локально через PowerShell:
 ```powershell
 $env:PYTHONPATH="${PWD}\hw"
 uvicorn shop_api.main:app --reload
 ```
+
+## Через Docker Compose:
+```powershell
+docker compose up --build
+```
+- Сервис будет доступен на http://localhost:8080
+- Prometheus на http://localhost:9090
+- Grafana на http://localhost:3000
 
 # 🔹 Тестирование WebSocket чата
 
@@ -47,3 +55,13 @@ ws2.send("Раз-два-три. Без понятия.");
 ```
 
 ![Тест 3 юзера и 2 чата](images/websocket_chat_test_3_users_2_rooms.png)
+
+Мониторинг через Prometheus и Grafana
+
+Скриншоты дашбордов:
+
+Prometheus:
+![Prometheus](images/prometheus_target_health.png)
+
+Grafana:
+![Grafana](images/grafana_work.png)

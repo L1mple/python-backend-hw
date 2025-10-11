@@ -8,9 +8,11 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from typing import Optional, Dict, List
+from prometheus_fastapi_instrumentator import Instrumentator
 import random
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 # Хранение данных в оперативной памяти (было сказано, что так можно без БД)
 items_db: dict[int, dict] = {}
