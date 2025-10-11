@@ -7,17 +7,16 @@ ARG PYTHONFAULTHANDLER=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PIP_DEFAULT_TIMEOUT=500
 
-RUN apt-get update && apt-get install -y gcc
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
 RUN python -m pip install --upgrade pip
 
-WORKDIR $APP_ROOT/src
-COPY . ./
-
-ENV VIRTUAL_ENV=$APP_ROOT/src/.venv \
-    PATH=$APP_ROOT/src/.venv/bin:$PATH
-
+COPY ./shop_api/requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt
 
-FROM base as local
+COPY ./shop_api ./shop_api
 
-CMD ["uvicorn", "demo_service.api:app", "--port", "8080", "--host", "0.0.0.0"]
+FROM base AS local
+
+CMD ["uvicorn", "shop_api.main:app", "--port", "8080", "--host", "0.0.0.0"]
