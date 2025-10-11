@@ -4,6 +4,7 @@ from fastapi import (
 from typing import Optional
 from contextlib import asynccontextmanager
 import aiosqlite
+from prometheus_fastapi_instrumentator import Instrumentator
 
 conn: aiosqlite.Connection | None = None
 
@@ -40,6 +41,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Shop API", lifespan=lifespan)
 api_router_cart = APIRouter(prefix='/cart')
 api_router_item = APIRouter(prefix='/item')
+
+
+instrumentator = Instrumentator()
+instrumentator.instrument(app).expose(app)
 
 
 async def get_conn() -> aiosqlite.Connection:
