@@ -1,11 +1,10 @@
-from fastapi import FastAPI, HTTPException, Query, Path, Response
+from fastapi import FastAPI, HTTPException, Query, Path, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
-
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
-
 
 class Item(BaseModel):
     id: int
@@ -15,13 +14,11 @@ class Item(BaseModel):
 
 class ItemCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     name: str
     price: float
 
 class ItemUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
     name: Optional[str] = None
     price: Optional[float] = None
 
@@ -42,7 +39,6 @@ carts: dict[int, dict] = {}
 item_id_counter = 0
 cart_id_counter = 0
 
-# Эндпоинты для Cart
 
 @app.post("/cart")
 async def create_cart():
@@ -57,7 +53,7 @@ async def create_cart():
     return JSONResponse(
         status_code=201,
         content={"id": new_id},
-        headers={"Location": f"/cart/{new_id}"}
+        headers={"location": f"/cart/{new_id}"}
     )
 
 @app.get("/cart/{cart_id}", response_model=Cart)
@@ -116,7 +112,6 @@ async def add_to_cart(cart_id: int = Path(..., ge=1), item_id: int = Path(..., g
     )
     return cart
 
-# Эндпоинты для Item
 
 @app.post("/item")
 async def create_item(item: ItemCreate):
@@ -132,7 +127,7 @@ async def create_item(item: ItemCreate):
     return JSONResponse(
         status_code=201,
         content=items[new_id],
-        headers={"Location": f"/item/{new_id}"}
+        headers={"location": f"/item/{new_id}"}
     )
 
 @app.get("/item/{item_id}", response_model=Item)
@@ -167,7 +162,6 @@ async def update_item(item: ItemCreate, item_id: int = Path(..., ge=1)):
         raise HTTPException(status_code=404, detail="Item not found")
     items[item_id]["name"] = item.name
     items[item_id]["price"] = item.price
-    # обновление корзины
     for cart in carts.values():
         for ci in cart["items"]:
             if ci["id"] == item_id:
@@ -188,7 +182,6 @@ async def partial_update_item(update: ItemUpdate, item_id: int = Path(..., ge=1)
         items[item_id]["name"] = update.name
     if update.price is not None:
         items[item_id]["price"] = update.price
-    # обновление корзины
     for cart in carts.values():
         for ci in cart["items"]:
             if ci["id"] == item_id:
@@ -206,7 +199,6 @@ async def delete_item(item_id: int = Path(..., ge=1)):
     if item_id not in items:
         raise HTTPException(status_code=404, detail="Item not found")
     items[item_id]["deleted"] = True
-    # обновление корзины
     for cart in carts.values():
         for ci in cart["items"]:
             if ci["id"] == item_id:
@@ -216,3 +208,7 @@ async def delete_item(item_id: int = Path(..., ge=1)):
             for ci in cart["items"] if ci["available"]
         )
     return Response(status_code=200)
+
+
+# Настройка Prometheus
+Instrumentator().instrument(app).expose(app)
