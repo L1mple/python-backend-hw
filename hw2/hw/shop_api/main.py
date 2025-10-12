@@ -4,8 +4,10 @@ import uvicorn
 import json
 import os
 from http import HTTPStatus
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 carts_file = "carts.json"
 items_file = "items.json"
