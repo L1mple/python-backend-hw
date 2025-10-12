@@ -197,5 +197,3 @@ def add_item_to_cart(cart_id: int, item_id: int):
     cart["price"] = calculate_cart_price(cart)
 
     return {"detail": "Item added to cart", "cart_id": cart_id}
-
-print("App started. Routes registered:", app.routes)
