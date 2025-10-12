@@ -4,8 +4,11 @@ from typing import List, Optional
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi import Request
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+
+instrumentator = Instrumentator().instrument(app).expose(app)
 
 items_db = {}
 carts_db = {}
