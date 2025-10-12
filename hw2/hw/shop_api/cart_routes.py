@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Response, HTTPException, Depends
 from http import HTTPStatus
-from .store.storage import local_storage
-from .contracts import IdModel, CartResponseModel, ListQueryModel
+from store.storage import local_storage
+from contracts import IdModel, CartResponseModel, ListQueryModel
 cart_router = APIRouter(prefix="/cart")
 
 @cart_router.post("/",
