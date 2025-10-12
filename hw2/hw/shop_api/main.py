@@ -1,8 +1,10 @@
 from fastapi import FastAPI, HTTPException, Query, Path, Response
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 ITEMS = {}  # товары{"id","name","price","deleted"}
 CARTS = {}  # корзина{item_id: quantity}
