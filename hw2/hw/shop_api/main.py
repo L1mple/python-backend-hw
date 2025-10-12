@@ -1,13 +1,19 @@
-from shop_api.storage.in_mem import lifespan
-from shop_api.handlers import router
-import datetime
-import platform
-import sys
-
-import fastapi
-import pydantic
-from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
+from fastapi import FastAPI
+import pydantic
+import fastapi
+import sys
+import platform
+import datetime
+from shop_api.handlers import router
+from shop_api.storage.psql_sqlalchemy import init_engine, create_schema
+
+
+def lifespan(app):
+    init_engine()
+    create_schema()
+    print("Database initialized", "Shema created")
+    yield
 
 
 VERSION = "1.0.0"

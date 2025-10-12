@@ -1,5 +1,4 @@
 services:
-
   fastapi-app:
     hostname: fastapi-app
     build:
@@ -7,10 +6,16 @@ services:
       dockerfile: ./Dockerfile
       target: dev
     restart: unless-stopped
+    environment:
+      - USE_PSQL=1
+      - DATABASE_URL=postgresql+psycopg2://shop:shop@postgres:5432/shopdb
+    depends_on:
+      - postgres
     ports:
       - 8000:8000
     networks:
       - python-backend-network
+      - backend-network
 
   grafana:
     image: grafana/grafana:latest
@@ -38,10 +43,32 @@ services:
       - "--web.console.templates=/usr/share/prometheus/consoles"
     ports:
       - 9090:9090
-    networks: 
+    networks:
       - python-backend-network
     restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    ports:
+      - 5432:5432
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
 
 networks:
   python-backend-network:
     driver: bridge
+  backend-network:
+    driver: bridge
+    internal: true

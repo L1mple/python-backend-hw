@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: test-user
+      POSTGRES_PASSWORD: test-pass
+      POSTGRES_DB: test-db
+    volumes:
+      - ./migrations:/docker-entrypoint-initdb.d
+    ports:
+      - 5542:5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $POSTGRES_DB -U $POSTGRES_USER"]
+      interval: 30s
+      timeout: 60s
+      retries: 5
+      start_period: 80s

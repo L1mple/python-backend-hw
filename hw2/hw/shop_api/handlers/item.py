@@ -1,10 +1,18 @@
-from dataclasses import asdict
 from http import HTTPStatus
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from shop_api.models.item import ItemCreate, ItemOut, ItemPatch, ItemPut, ItemRecord
-from shop_api.storage.in_mem import get_store
+from shop_api.models.item import ItemCreate, ItemOut, ItemPatch, ItemPut
+from shop_api.storage.psql_sqlalchemy import (
+    get_item as psql_get_item,
+    list_items as psql_list_items,
+    create_item as psql_create_item,
+    update_item as psql_update_item,
+    patch_item as psql_patch_item,
+    delete_item as psql_delete_item,
+    get_store,
+)
+
 
 router = APIRouter(prefix="/item", tags=["item"])
 
@@ -18,18 +26,14 @@ async def list_items(
     show_deleted: bool = Query(False),
     deps=Depends(get_store),
 ):
-    items: ItemRecord
-    items, _, _ = deps
-    result: list[ItemOut] = []
-    for iid, data in items.items():
-        if not show_deleted and data.deleted:
-            continue
-        if min_price is not None and data.price < min_price:
-            continue
-        if max_price is not None and data.price > max_price:
-            continue
-        result.append(ItemOut(id=iid, **asdict(data)))
-    return result[offset : offset + limit]
+    rows = psql_list_items(
+        offset=offset,
+        limit=limit,
+        min_price=min_price,
+        max_price=max_price,
+        show_deleted=show_deleted,
+    )
+    return [ItemOut(**r) for r in rows]
 
 
 @router.get("/{item_id}", response_model=ItemOut, status_code=HTTPStatus.OK)
@@ -37,13 +41,13 @@ async def item_by_id(
     item_id: int,
     deps=Depends(get_store),
 ):
-    items, _, _ = deps
-    rec: None | ItemRecord = items.get(item_id)
-    if rec is None or rec.deleted:
+    r = psql_get_item(item_id)
+    if not r or r.get("deleted"):
         raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail={"error": "item not found"}
+            status_code=HTTPStatus.NOT_FOUND,
+            detail={"error": "item not found"},
         )
-    return ItemOut(id=item_id, **asdict(items[item_id]))
+    return ItemOut(**r)
 
 
 @router.post("", response_model=ItemOut, status_code=HTTPStatus.CREATED)
@@ -52,17 +56,8 @@ async def create_item(
     request: Request,
     deps=Depends(get_store),
 ):
-    items, _, lock = deps
-    async with lock:
-        new_id = request.app.state.last_item_id + 1
-        request.app.state.last_item_id = new_id
-        items[new_id] = ItemRecord(
-            name=payload.name,
-            price=payload.price,
-            description=payload.description,
-            deleted=False,
-        )
-    return ItemOut(id=new_id, **asdict(items[new_id]))
+    r = psql_create_item(payload.name, payload.price, payload.description)
+    return ItemOut(**r)
 
 
 @router.put("/{item_id}", response_model=ItemOut, status_code=HTTPStatus.OK)
@@ -71,22 +66,13 @@ async def put_item(
     payload: ItemPut,
     deps=Depends(get_store),
 ):
-    items, _, lock = deps
-    async with lock:
-        if item_id not in items:
-            raise HTTPException(
-                status_code=HTTPStatus.NOT_FOUND,
-                detail={
-                    "error": "item not found",
-                },
-            )
-        items[item_id] = ItemRecord(
-            name=payload.name,
-            price=payload.price,
-            description=payload.description,
-            deleted=False,
+    r = psql_update_item(item_id, payload.name, payload.price, payload.description)
+    if not r:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail={"error": "item not found"},
         )
-    return ItemOut(id=item_id, **asdict(items[item_id]))
+    return ItemOut(**r)
 
 
 @router.patch("/{item_id}", response_model=ItemOut, status_code=HTTPStatus.OK)
@@ -95,27 +81,26 @@ async def patch_item(
     payload: ItemPatch,
     deps=Depends(get_store),
 ):
-    items, _, locks = deps
-    async with locks:
-        item = items.get(item_id)
-        if item is None:
-            raise HTTPException(
-                status_code=HTTPStatus.NOT_FOUND,
-                detail={
-                    "error": "item not found",
-                },
-            )
-
-        if item.deleted:
-            raise HTTPException(
-                status_code=HTTPStatus.NOT_MODIFIED,
-                detail={"error": "item is deleted"},
-            )
-
-        update_data = payload.model_dump(exclude_unset=True, exclude_none=True)
-        for k, v in update_data.items():
-            setattr(item, k, v)
-    return ItemOut(id=item_id, **asdict(item))
+    update_data = payload.model_dump(exclude_unset=True, exclude_none=True)
+    # check existence and deleted status first
+    cur = psql_get_item(item_id)
+    if not cur:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail={"error": "item not found"},
+        )
+    if cur.get("deleted"):
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_MODIFIED,
+            detail={"error": "item is deleted"},
+        )
+    r = psql_patch_item(item_id, update_data)
+    if not r:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail={"error": "item not found"},
+        )
+    return ItemOut(**r)
 
 
 @router.delete("/{item_id}", response_model=ItemOut, status_code=HTTPStatus.OK)
@@ -123,12 +108,10 @@ async def delete_item(
     item_id: int,
     deps=Depends(get_store),
 ):
-    items, _, locks = deps
-    async with locks:
-        rec = items.get(item_id)
-        if rec is None:
-            raise HTTPException(
-                status_code=HTTPStatus.NOT_FOUND, detail={"error": "item not found"}
-            )
-        rec.deleted = True
-        return ItemOut(id=item_id, **asdict(items[item_id]))
+    r = psql_delete_item(item_id)
+    if not r:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail={"error": "item not found"},
+        )
+    return ItemOut(**r)
