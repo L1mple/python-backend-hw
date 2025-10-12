@@ -2,12 +2,13 @@ from fastapi import FastAPI, HTTPException, Response
 from typing import Optional, Annotated
 from pydantic import Field
 from http import HTTPStatus
-
+from prometheus_fastapi_instrumentator import Instrumentator
 from shop_api.models import ItemCreate, ItemUpdate
 from shop_api.storage import storage
 
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 
 @app.post("/item", status_code=HTTPStatus.CREATED)
