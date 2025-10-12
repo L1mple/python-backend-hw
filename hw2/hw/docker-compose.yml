@@ -20,7 +20,7 @@ services:
   prometheus:
     image: prom/prometheus
     volumes:
-      - ./settings/prometheus/:/etc/prometheus/
+      - ./prometheus/:/etc/prometheus/
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"

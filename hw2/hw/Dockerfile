@@ -10,15 +10,14 @@ ARG PYTHONFAULTHANDLER=1 \
 RUN apt-get update && apt-get install -y gcc
 RUN python -m pip install --upgrade pip
 
-WORKDIR /app
-COPY . /app
-RUN pip install -r requirements.txt
-ENV PYTHONPATH=/app:/app/hw
+WORKDIR $APP_ROOT/src
+COPY . ./
 
 ENV VIRTUAL_ENV=$APP_ROOT/src/.venv \
     PATH=$APP_ROOT/src/.venv/bin:$PATH
 
+RUN pip install -r requirements.txt
 
 FROM base as local
-EXPOSE 8080
+
 CMD ["uvicorn", "shop_api.main:app", "--port", "8080", "--host", "0.0.0.0"]
