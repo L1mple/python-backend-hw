@@ -5,8 +5,10 @@ import string
 
 from fastapi import FastAPI, HTTPException, Response, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, ConfigDict
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 
 # Models
