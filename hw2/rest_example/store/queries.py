@@ -1,6 +1,6 @@
 from typing import Iterable
 
-from hw2.rest_example.store.models import (
+from store.models import (
     PatchPokemonInfo,
     PokemonEntity,
     PokemonInfo,
