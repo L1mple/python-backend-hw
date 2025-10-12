@@ -1,0 +1,9 @@
+apiVersion: 1
+providers:
+  - name: "HW2 Dashboards"
+    folder: "HW2"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
