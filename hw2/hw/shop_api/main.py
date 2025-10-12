@@ -2,9 +2,11 @@ from http import HTTPStatus
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, Response
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 
 # ==================== Models ====================
