@@ -10,10 +10,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
-	"shop-api/internal/api"
-	"shop-api/internal/config"
+	"lecture4/internal/api"
+	"lecture4/internal/config"
 
-	_ "shop-api/docs"
+	_ "lecture4/docs"
 )
 
 // @title Shop API

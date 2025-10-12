@@ -1,11 +1,12 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"strconv"
 
-	"shop-api/internal/repository"
+	"lecture4/internal/repository"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lib/pq"
@@ -21,6 +22,88 @@ func NewHandler(db *sql.DB) *Handler {
 		queries: repository.New(db),
 		db:      db,
 	}
+}
+
+// convertToFloat64 преобразует interface{} из базы данных в float64
+func convertToFloat64(value interface{}) float64 {
+	if value == nil {
+		return 0
+	}
+
+	switch v := value.(type) {
+	case float64:
+		return v
+	case string:
+		result, _ := strconv.ParseFloat(v, 64)
+		return result
+	case []byte:
+		result, _ := strconv.ParseFloat(string(v), 64)
+		return result
+	case int64:
+		return float64(v)
+	default:
+		return 0
+	}
+}
+
+// itemToResponse преобразует модель Item в ItemResponse
+func itemToResponse(item repository.Item) ItemResponse {
+	return ItemResponse{
+		ID:      item.ID,
+		Name:    item.Name,
+		Price:   item.Price,
+		Deleted: item.Deleted,
+	}
+}
+
+// cartItemsToResponse преобразует список GetCartItemsRow в CartItemResponse
+func cartItemsToResponse(items []repository.GetCartItemsRow) []CartItemResponse {
+	result := make([]CartItemResponse, 0, len(items))
+	for _, ci := range items {
+		result = append(result, CartItemResponse{
+			ID:        ci.ItemID,
+			Name:      ci.Name,
+			Quantity:  ci.Quantity,
+			Available: !ci.Deleted,
+		})
+	}
+	return result
+}
+
+// cartItemsForCartsToResponse преобразует список GetCartItemsForCartsRow в CartItemResponse
+func cartItemsForCartsToResponse(items []repository.GetCartItemsForCartsRow) []CartItemResponse {
+	result := make([]CartItemResponse, 0, len(items))
+	for _, ci := range items {
+		result = append(result, CartItemResponse{
+			ID:        ci.ItemID,
+			Name:      ci.Name,
+			Quantity:  ci.Quantity,
+			Available: !ci.Deleted,
+		})
+	}
+	return result
+}
+
+// buildCartResponse строит полный ответ с информацией о корзине
+func (h *Handler) buildCartResponse(ctx context.Context, cartID int32) (CartResponse, error) {
+	cartItems, err := h.queries.GetCartItems(ctx, cartID)
+	if err != nil {
+		return CartResponse{}, err
+	}
+
+	totalPriceRaw, err := h.queries.GetCartTotalPrice(ctx, cartID)
+	if err != nil {
+		return CartResponse{}, err
+	}
+
+	totalPrice := convertToFloat64(totalPriceRaw)
+	items := cartItemsToResponse(cartItems)
+
+	return CartResponse{
+		ID:    cartID,
+		Items: items,
+		Price: totalPrice,
+	}, nil
 }
 
 // PostItem godoc
@@ -50,12 +133,7 @@ func (h *Handler) PostItem(c *gin.Context) {
 	}
 
 	c.Header("Location", "/item/"+strconv.Itoa(int(item.ID)))
-	c.JSON(http.StatusCreated, ItemResponse{
-		ID:      item.ID,
-		Name:    item.Name,
-		Price:   item.Price,
-		Deleted: item.Deleted,
-	})
+	c.JSON(http.StatusCreated, itemToResponse(item))
 }
 
 // GetItemByID godoc
@@ -89,12 +167,7 @@ func (h *Handler) GetItemByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, ItemResponse{
-		ID:      item.ID,
-		Name:    item.Name,
-		Price:   item.Price,
-		Deleted: item.Deleted,
-	})
+	c.JSON(http.StatusOK, itemToResponse(item))
 }
 
 // GetItems godoc
@@ -140,12 +213,7 @@ func (h *Handler) GetItems(c *gin.Context) {
 
 	result := make([]ItemResponse, 0, len(items))
 	for _, item := range items {
-		result = append(result, ItemResponse{
-			ID:      item.ID,
-			Name:    item.Name,
-			Price:   item.Price,
-			Deleted: item.Deleted,
-		})
+		result = append(result, itemToResponse(item))
 	}
 
 	c.JSON(http.StatusOK, result)
@@ -202,12 +270,7 @@ func (h *Handler) PutItem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, ItemResponse{
-		ID:      item.ID,
-		Name:    item.Name,
-		Price:   item.Price,
-		Deleted: item.Deleted,
-	})
+	c.JSON(http.StatusOK, itemToResponse(item))
 }
 
 // PatchItem godoc
@@ -267,12 +330,7 @@ func (h *Handler) PatchItem(c *gin.Context) {
 			c.JSON(http.StatusNotModified, ErrorResponse{Message: "Item with id=" + c.Param("id") + " not found or is deleted"})
 			return
 		}
-		c.JSON(http.StatusOK, ItemResponse{
-			ID:      existingItem.ID,
-			Name:    existingItem.Name,
-			Price:   existingItem.Price,
-			Deleted: existingItem.Deleted,
-		})
+		c.JSON(http.StatusOK, itemToResponse(existingItem))
 		return
 	}
 
@@ -285,12 +343,7 @@ func (h *Handler) PatchItem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, ItemResponse{
-		ID:      item.ID,
-		Name:    item.Name,
-		Price:   item.Price,
-		Deleted: item.Deleted,
-	})
+	c.JSON(http.StatusOK, itemToResponse(item))
 }
 
 // DeleteItem godoc
@@ -360,38 +413,13 @@ func (h *Handler) GetCartByID(c *gin.Context) {
 		return
 	}
 
-	cartItems, err := h.queries.GetCartItems(c.Request.Context(), cart.ID)
+	cartResponse, err := h.buildCartResponse(c.Request.Context(), cart.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
 		return
 	}
 
-	totalPriceRaw, err := h.queries.GetCartTotalPrice(c.Request.Context(), cart.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
-		return
-	}
-
-	totalPrice := float64(0)
-	if totalPriceRaw != nil {
-		totalPrice, _ = totalPriceRaw.(float64)
-	}
-
-	items := make([]CartItemResponse, 0, len(cartItems))
-	for _, ci := range cartItems {
-		items = append(items, CartItemResponse{
-			ID:        ci.ItemID,
-			Name:      ci.Name,
-			Quantity:  ci.Quantity,
-			Available: !ci.Deleted,
-		})
-	}
-
-	c.JSON(http.StatusOK, CartResponse{
-		ID:    cart.ID,
-		Items: items,
-		Price: totalPrice,
-	})
+	c.JSON(http.StatusOK, cartResponse)
 }
 
 // GetCarts godoc
@@ -470,20 +498,8 @@ func (h *Handler) GetCarts(c *gin.Context) {
 
 	result := make([]CartResponse, 0, len(carts))
 	for _, cart := range carts {
-		items := make([]CartItemResponse, 0)
-		for _, ci := range cartItemsMap[cart.ID] {
-			items = append(items, CartItemResponse{
-				ID:        ci.ItemID,
-				Name:      ci.Name,
-				Quantity:  ci.Quantity,
-				Available: !ci.Deleted,
-			})
-		}
-
-		totalPrice := float64(0)
-		if cart.TotalPrice != nil {
-			totalPrice, _ = cart.TotalPrice.(float64)
-		}
+		items := cartItemsForCartsToResponse(cartItemsMap[cart.ID])
+		totalPrice := convertToFloat64(cart.TotalPrice)
 
 		result = append(result, CartResponse{
 			ID:    cart.ID,
@@ -558,36 +574,11 @@ func (h *Handler) AddItemToCart(c *gin.Context) {
 	}
 
 	// Возвращаем обновленную корзину
-	cartItems, err := h.queries.GetCartItems(c.Request.Context(), int32(cartID))
+	cartResponse, err := h.buildCartResponse(c.Request.Context(), int32(cartID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
 		return
 	}
 
-	totalPriceRaw, err := h.queries.GetCartTotalPrice(c.Request.Context(), int32(cartID))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
-		return
-	}
-
-	totalPrice := float64(0)
-	if totalPriceRaw != nil {
-		totalPrice, _ = totalPriceRaw.(float64)
-	}
-
-	items := make([]CartItemResponse, 0, len(cartItems))
-	for _, ci := range cartItems {
-		items = append(items, CartItemResponse{
-			ID:        ci.ItemID,
-			Name:      ci.Name,
-			Quantity:  ci.Quantity,
-			Available: !ci.Deleted,
-		})
-	}
-
-	c.JSON(http.StatusOK, CartResponse{
-		ID:    int32(cartID),
-		Items: items,
-		Price: totalPrice,
-	})
+	c.JSON(http.StatusOK, cartResponse)
 }
