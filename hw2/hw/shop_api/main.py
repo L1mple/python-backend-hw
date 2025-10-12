@@ -1,11 +1,18 @@
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from uuid import uuid4
-
+import time
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ConfigDict, Field
 
 app = FastAPI(title="Shop API")
+
+# Prometheus metrics
+REQUEST_COUNT = Counter('shop_api_requests_total', 'Total requests', ['method', 'endpoint', 'status'])
+REQUEST_DURATION = Histogram('shop_api_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
+ITEMS_CREATED = Counter('shop_api_items_created_total', 'Total items created')
+CARTS_CREATED = Counter('shop_api_carts_created_total', 'Total carts created')
 
 
 # In-memory storage
@@ -64,6 +71,7 @@ def create_cart(response: Response) -> Dict[str, int]:
     _carts[cart_id] = {"id": cart_id, "items": []}
     response.headers["location"] = f"/cart/{cart_id}"
     response.status_code = 201
+    CARTS_CREATED.inc()
     return {"id": cart_id}
 
 
@@ -173,6 +181,7 @@ def create_item(item: ItemCreate, response: Response) -> Dict[str, Any]:
     data = {"id": item_id, "name": item.name, "price": float(item.price), "deleted": False}
     _items[item_id] = data
     response.status_code = 201
+    ITEMS_CREATED.inc()
     return data
 
 
@@ -295,3 +304,29 @@ async def ws_chat(chat_name: str, ws: WebSocket):
     except WebSocketDisconnect:
         room.unsubscribe(ws)
         await room.publish(f"[{chat_name}] client {client_id} left")
+
+
+# Middleware for metrics
+@app.middleware("http")
+async def metrics_middleware(request, call_next):
+    start_time = time.time()
+    method = request.method
+    endpoint = request.url.path
+    
+    response = await call_next(request)
+    
+    duration = time.time() - start_time
+    REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(duration)
+    REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
+    
+    return response
+
+# Health check endpoint
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
+# Prometheus metrics endpoint
+@app.get("/metrics")
+def metrics():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
