@@ -3,9 +3,13 @@ from pydantic import BaseModel, Field
 from typing import Optional
 import random
 import string
-import uvicorn  
+import uvicorn
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+
+# Инициализация Prometheus мониторинга
+Instrumentator().instrument(app).expose(app)
 
 items_storage = {} 
 carts_storage = {} 
@@ -40,7 +44,7 @@ class Cart(BaseModel):
     items: list[CartItem]
     price: float
 
-#Эндроинты для товаров
+# Эндпоинты для товаров
 @app.post("/item", response_model=Item, status_code=201)
 def create_item(item: ItemCreate):
     if items_storage:
@@ -111,7 +115,7 @@ def delete_item(id: int):
     stored_item.deleted = True
     return stored_item
 
-#Эндроинты для корзины
+# Эндпоинты для корзины
 @app.post("/cart", status_code=201)
 def post_cart(response: Response):
     if carts_storage:
@@ -215,7 +219,6 @@ def add_item_to_cart(cart_id: int, item_id: int):
     if item_id in cart["items"]:
         cart["items"][item_id] += 1
     else:
-
         cart["items"][item_id] = 1
 
     cart_items = []
@@ -241,6 +244,7 @@ def add_item_to_cart(cart_id: int, item_id: int):
 
 # Хранилище активных подключений по комнатам
 chat_rooms: dict[str, list[tuple[WebSocket, str]]] = {}
+
 def generate_username() -> str:
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
 
