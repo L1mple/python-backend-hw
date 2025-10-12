@@ -5,8 +5,12 @@ from typing import List, Optional, Dict
 import uuid
 from collections import defaultdict
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 
 app = FastAPI(title="Shop API")
+
+Instrumentator().instrument(app).expose(app)
 
 # ----------------- MODELS -----------------
 class Item(BaseModel):
