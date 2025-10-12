@@ -10,11 +10,11 @@ ARG PYTHONFAULTHANDLER=1 \
 RUN apt-get update && apt-get install -y gcc
 RUN python -m pip install --upgrade pip
 
-WORKDIR $APP_ROOT/src
-COPY . ./
+WORKDIR app
+COPY . .
 
-ENV VIRTUAL_ENV=$APP_ROOT/src/.venv \
-    PATH=$APP_ROOT/src/.venv/bin:$PATH
+ENV VIRTUAL_ENV=app/.venv \
+    PATH=app/.venv/bin:$PATH
 
 RUN pip install -r requirements.txt
 
