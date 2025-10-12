@@ -1,0 +1,4 @@
+fastapi>=0.117.1
+uvicorn[standard]
+prometheus_client
+prometheus-fastapi-instrumentator
