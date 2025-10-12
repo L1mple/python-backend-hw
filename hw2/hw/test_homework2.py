@@ -2,6 +2,12 @@ from http import HTTPStatus
 from typing import Any
 from uuid import uuid4
 
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+
 import pytest
 from faker import Faker
 from fastapi.testclient import TestClient
