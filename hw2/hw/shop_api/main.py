@@ -7,8 +7,10 @@ from typing import Dict, List, Optional
 from http import HTTPStatus
 import itertools, asyncio
 from uuid import uuid4
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 class ItemModel(BaseModel):
     id: int
