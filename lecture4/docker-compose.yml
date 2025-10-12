@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: hw4_postgres
+    environment:
+      POSTGRES_DB: hw4_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  edgedb:
+    image: edgedb/edgedb:5
+    container_name: hw4_edgedb
+    environment:
+      EDGEDB_SERVER_SECURITY: insecure_dev_mode
+    ports:
+      - "5656:5656"
+    volumes:
+      - edgedb_data:/var/lib/edgedb/data
+
+volumes:
+  postgres_data:
+  edgedb_data:
