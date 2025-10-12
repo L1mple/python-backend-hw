@@ -2,8 +2,10 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Dict, Any
 from fastapi.responses import JSONResponse, Response
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 class ItemBase(BaseModel):
     name: str
@@ -195,3 +197,5 @@ def add_item_to_cart(cart_id: int, item_id: int):
     cart["price"] = calculate_cart_price(cart)
 
     return {"detail": "Item added to cart", "cart_id": cart_id}
+
+print("App started. Routes registered:", app.routes)
