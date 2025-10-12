@@ -18,7 +18,6 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
-Base.metadata.create_all(bind=engine)
 
 
 def get_db():
@@ -63,3 +62,6 @@ class CartItem(Base):
 
     cart: Mapped['Cart'] = relationship(back_populates='items')
     item: Mapped['Item'] = relationship(back_populates='cart_items')
+
+
+Base.metadata.create_all(bind=engine)
