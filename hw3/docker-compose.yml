@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  shop-api:
+    build: 
+      context: .
+      dockerfile: ./shop.dockerfile
+    image: app/shop
+    ports:
+      - "8000:8000"  # Add appropriate port mapping
+    networks:
+      - hello_fastapi
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus_conf.yaml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    networks:
+      - hello_fastapi  # ADD THIS LINE
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - 3000:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - hello_fastapi  # ADD THIS LINE TOO
+
+volumes:
+  prometheus_data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./prometheus_data
+  grafana_data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./grafana_data
+
+networks:
+  hello_fastapi:
+    driver: bridge
