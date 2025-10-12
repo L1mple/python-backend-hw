@@ -1,8 +1,22 @@
 from http import HTTPStatus
 from fastapi import FastAPI, HTTPException, Response, Query
 from pydantic import BaseModel, Field, ConfigDict
+from prometheus_fastapi_instrumentator import Instrumentator, metrics
+from prometheus_client import Counter, Histogram, Gauge
+import time
 
 app = FastAPI(title="Shop API")
+
+# Инициализация Prometheus инструментатора
+instrumentator = Instrumentator()
+instrumentator.instrument(app).expose(app)
+
+# Кастомные метрики
+items_counter = Counter('shop_items_total', 'Total number of items created', ['operation'])
+carts_counter = Counter('shop_carts_total', 'Total number of carts created', ['operation'])
+request_duration = Histogram('shop_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
+active_items = Gauge('shop_active_items', 'Number of active items in the system')
+active_carts = Gauge('shop_active_carts', 'Number of active carts in the system')
 
 class ItemIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
@@ -33,6 +47,8 @@ _next_item_id: int = 1
 
 @app.post("/item", response_model=Item, status_code=201)
 def create_item(payload: ItemIn, response: Response) -> Item:
+    start_time = time.time()
+    
     global _next_item_id
     item = Item(
         id = _next_item_id,
@@ -42,6 +58,11 @@ def create_item(payload: ItemIn, response: Response) -> Item:
     )
     _items[item.id] = item
     _next_item_id += 1
+    
+    # Обновляем метрики
+    items_counter.labels(operation='created').inc()
+    active_items.set(len([i for i in _items.values() if not i.deleted]))
+    request_duration.labels(method='POST', endpoint='/item').observe(time.time() - start_time)
 
     response.headers["Location"] = f"/item/{item.id}"
     return item
@@ -56,10 +77,17 @@ def get_item(id: int) -> Item:
 @app.post("/cart", response_model=CartCreated, status_code=201)
 def create_cart(response: Response) -> CartCreated:
     """Создает пустую коризну и возврашает ее id"""
+    start_time = time.time()
+    
     global _next_cart_id
     cart_id = _next_cart_id
     _carts[cart_id] = {}
     _next_cart_id += 1
+    
+    # Обновляем метрики
+    carts_counter.labels(operation='created').inc()
+    active_carts.set(len(_carts))
+    request_duration.labels(method='POST', endpoint='/cart').observe(time.time() - start_time)
 
     response.headers["Location"] = f"/cart/{cart_id}"
     return CartCreated(id=cart_id)
@@ -170,12 +198,19 @@ def delete_item(id: int) -> Item:
     Удаляет товар:
     - товар помечается как удаленный
     """
+    start_time = time.time()
+    
     item = _items.get(id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     #идемптентность
     if not item.deleted:
         item.deleted = True
+        # Обновляем метрики только если товар действительно удалили
+        items_counter.labels(operation='deleted').inc()
+        active_items.set(len([i for i in _items.values() if not i.deleted]))
+    
+    request_duration.labels(method='DELETE', endpoint='/item').observe(time.time() - start_time)
     return item
 
 @app.put("/item/{id}", response_model=Item)
