@@ -3,10 +3,14 @@ import itertools
 import typing
 
 from fastapi import FastAPI, HTTPException, Response, Query
+from prometheus_fastapi_instrumentator import Instrumentator
 
 import shop_api.schemas as schemas
 
 app = FastAPI(title="Shop API")
+Instrumentator(
+    excluded_handlers=["/metrics"],
+).instrument(app).expose(app)
 
 
 class Store:
