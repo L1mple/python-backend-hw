@@ -1,9 +1,34 @@
-from fastapi import FastAPI, HTTPException, status, Response
+from fastapi import FastAPI, HTTPException, status, Response, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
+from prometheus_client import Counter, Histogram, generate_latest, REGISTRY
+import time
 
 app = FastAPI(title="Shop API")
+
+# Метрики Prometheus
+REQUEST_COUNT = Counter(
+    'http_requests_total',
+    'Total HTTP Requests',
+    ['method', 'endpoint', 'status_code']
+)
+
+REQUEST_LATENCY = Histogram(
+    'http_request_duration_seconds',
+    'HTTP request latency',
+    ['method', 'endpoint']
+)
+
+ERROR_COUNT = Counter(
+    'http_errors_total',
+    'Total HTTP Errors',
+    ['method', 'endpoint', 'error_type']
+)
+
+ITEMS_CREATED = Counter('items_created_total', 'Total items created')
+CARTS_CREATED = Counter('carts_created_total', 'Total carts created')
+ITEMS_ADDED_TO_CART = Counter('items_added_to_cart_total', 'Total items added to cart')
 
 # Хранение данных в памяти
 items_db: Dict[int, Dict] = {}
@@ -35,6 +60,33 @@ class CartResponse(BaseModel):
     items: List[CartItem]
     price: float
 
+# Middleware для сбора метрик
+@app.middleware("http")
+async def monitor_requests(request: Request, call_next):
+    start_time = time.time()
+    method = request.method
+    endpoint = request.url.path
+    
+    try:
+        response = await call_next(request)
+        REQUEST_COUNT.labels(method=method, endpoint=endpoint, status_code=response.status_code).inc()
+        
+        # Логируем ошибки
+        if response.status_code >= 400:
+            ERROR_COUNT.labels(method=method, endpoint=endpoint, error_type=f"http_{response.status_code}").inc()
+            
+        return response
+    except Exception as e:
+        ERROR_COUNT.labels(method=method, endpoint=endpoint, error_type=type(e).__name__).inc()
+        raise
+    finally:
+        REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(time.time() - start_time)
+
+# Эндпоинт для метрик Prometheus
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(REGISTRY), media_type="text/plain")
+
 # Вспомогательные функции
 def get_next_item_id():
     global item_counter
@@ -64,6 +116,7 @@ async def create_cart(response: Response):
         "id": cart_id,
         "items": []
     }
+    CARTS_CREATED.inc()
     response.headers["Location"] = f"/cart/{cart_id}"
     return {"id": cart_id}
 
@@ -92,7 +145,6 @@ async def get_cart(cart_id: int):
         "items": response_items,
         "price": price
     }
-
 
 @app.get("/cart")
 async def get_carts(
@@ -168,6 +220,7 @@ async def add_to_cart(cart_id: int, item_id: int):
     for cart_item in cart["items"]:
         if cart_item["id"] == item_id:
             cart_item["quantity"] += 1
+            ITEMS_ADDED_TO_CART.inc()
             return {"message": "Item quantity increased"}
     
     # Добавляем новый товар
@@ -177,6 +230,7 @@ async def add_to_cart(cart_id: int, item_id: int):
         "quantity": 1
     })
     
+    ITEMS_ADDED_TO_CART.inc()
     return {"message": "Item added to cart"}
 
 # API для товаров
@@ -189,6 +243,7 @@ async def create_item(item: ItemCreate):
         "price": item.price,
         "deleted": False
     }
+    ITEMS_CREATED.inc()
     return items_db[item_id]
 
 @app.get("/item/{item_id}")
@@ -201,7 +256,6 @@ async def get_item(item_id: int):
         raise HTTPException(status_code=404, detail="Item not found")
     
     return item
-
 
 @app.get("/item")
 async def get_items(
@@ -274,7 +328,6 @@ async def partial_update_item(item_id: int, item_update: Dict[str, Any]):
     
     return items_db[item_id]
 
-
 @app.delete("/item/{item_id}")
 async def delete_item(item_id: int):
     if item_id not in items_db:
@@ -282,3 +335,7 @@ async def delete_item(item_id: int):
     
     items_db[item_id]["deleted"] = True
     return {"message": "Item deleted"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": time.time()}
