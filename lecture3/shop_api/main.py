@@ -2,6 +2,7 @@ from typing import List
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Path, Depends, HTTPException, Response
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from shop_api.db_manager import DB
 from shop_api.models import (
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI):
     app.state.db.close()
 
 app = FastAPI(title="Shop API", lifespan=lifespan)
+Instrumentator().instrument(app).expose(app)
 
 
 def get_db(request: Request) -> DB:

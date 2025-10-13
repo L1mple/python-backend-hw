@@ -2,12 +2,12 @@ version: "3"
 
 services:
 
-  local:
+  shop:
     build:
       context: .
       dockerfile: ./Dockerfile
       target: local
-    restart: always
+    restart: unless-stopped
     ports:
       - 8080:8080
 
@@ -15,7 +15,7 @@ services:
     image: grafana/grafana:latest
     ports:
       - 3000:3000
-    restart: always
+    restart: unless-stopped
 
   prometheus:
     image: prom/prometheus
@@ -28,4 +28,4 @@ services:
       - "--web.console.templates=/usr/share/prometheus/consoles"
     ports:
       - 9090:9090
-    restart: always
+    restart: unless-stopped
