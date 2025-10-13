@@ -24,13 +24,13 @@ func NewHandler(db *sql.DB) *Handler {
 	}
 }
 
-// itemToResponse преобразует модель Item в ItemResponse
-func itemToResponse(item repository.Item) ItemResponse {
+// Обобщенная функция для конверсии любого типа Row с полями ID, Name, Price, Deleted в ItemResponse
+func rowToItemResponse(id int32, name string, price float64, deleted bool) ItemResponse {
 	return ItemResponse{
-		ID:      item.ID,
-		Name:    item.Name,
-		Price:   item.Price,
-		Deleted: item.Deleted,
+		ID:      id,
+		Name:    name,
+		Price:   price,
+		Deleted: deleted,
 	}
 }
 
@@ -110,7 +110,7 @@ func (h *Handler) PostItem(c *gin.Context) {
 	}
 
 	c.Header("Location", "/item/"+strconv.Itoa(int(item.ID)))
-	c.JSON(http.StatusCreated, itemToResponse(item))
+	c.JSON(http.StatusCreated, rowToItemResponse(item.ID, item.Name, item.Price, item.Deleted))
 }
 
 // GetItemByID godoc
@@ -144,7 +144,7 @@ func (h *Handler) GetItemByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, itemToResponse(item))
+	c.JSON(http.StatusOK, rowToItemResponse(item.ID, item.Name, item.Price, item.Deleted))
 }
 
 // GetItems godoc
@@ -164,15 +164,15 @@ func (h *Handler) GetItems(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	showDeleted := c.DefaultQuery("show_deleted", "false") == "true"
 
-	var minPrice, maxPrice sql.NullString
+	var minPrice, maxPrice sql.NullFloat64
 	if minPriceStr := c.Query("min_price"); minPriceStr != "" {
-		if _, err := strconv.ParseFloat(minPriceStr, 64); err == nil {
-			minPrice = sql.NullString{String: minPriceStr, Valid: true}
+		if val, err := strconv.ParseFloat(minPriceStr, 64); err == nil {
+			minPrice = sql.NullFloat64{Float64: val, Valid: true}
 		}
 	}
 	if maxPriceStr := c.Query("max_price"); maxPriceStr != "" {
-		if _, err := strconv.ParseFloat(maxPriceStr, 64); err == nil {
-			maxPrice = sql.NullString{String: maxPriceStr, Valid: true}
+		if val, err := strconv.ParseFloat(maxPriceStr, 64); err == nil {
+			maxPrice = sql.NullFloat64{Float64: val, Valid: true}
 		}
 	}
 
@@ -190,7 +190,7 @@ func (h *Handler) GetItems(c *gin.Context) {
 
 	result := make([]ItemResponse, 0, len(items))
 	for _, item := range items {
-		result = append(result, itemToResponse(item))
+		result = append(result, rowToItemResponse(item.ID, item.Name, item.Price, item.Deleted))
 	}
 
 	c.JSON(http.StatusOK, result)
@@ -247,7 +247,7 @@ func (h *Handler) PutItem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, itemToResponse(item))
+	c.JSON(http.StatusOK, rowToItemResponse(item.ID, item.Name, item.Price, item.Deleted))
 }
 
 // PatchItem godoc
@@ -275,23 +275,49 @@ func (h *Handler) PatchItem(c *gin.Context) {
 		return
 	}
 
-	var item repository.Item
 	if req.Name != nil && req.Price != nil {
-		item, err = h.queries.PatchItemBoth(c.Request.Context(), repository.PatchItemBothParams{
+		item, err := h.queries.PatchItemBoth(c.Request.Context(), repository.PatchItemBothParams{
 			ID:    int32(id),
 			Name:  *req.Name,
 			Price: *req.Price,
 		})
+		if err != nil {
+			if err == sql.ErrNoRows {
+				c.JSON(http.StatusNotModified, ErrorResponse{Message: "Item with id=" + c.Param("id") + " not found or is deleted"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, rowToItemResponse(item.ID, item.Name, item.Price, item.Deleted))
 	} else if req.Name != nil {
-		item, err = h.queries.PatchItemName(c.Request.Context(), repository.PatchItemNameParams{
+		item, err := h.queries.PatchItemName(c.Request.Context(), repository.PatchItemNameParams{
 			ID:   int32(id),
 			Name: *req.Name,
 		})
+		if err != nil {
+			if err == sql.ErrNoRows {
+				c.JSON(http.StatusNotModified, ErrorResponse{Message: "Item with id=" + c.Param("id") + " not found or is deleted"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, rowToItemResponse(item.ID, item.Name, item.Price, item.Deleted))
 	} else if req.Price != nil {
-		item, err = h.queries.PatchItemPrice(c.Request.Context(), repository.PatchItemPriceParams{
+		item, err := h.queries.PatchItemPrice(c.Request.Context(), repository.PatchItemPriceParams{
 			ID:    int32(id),
 			Price: *req.Price,
 		})
+		if err != nil {
+			if err == sql.ErrNoRows {
+				c.JSON(http.StatusNotModified, ErrorResponse{Message: "Item with id=" + c.Param("id") + " not found or is deleted"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, rowToItemResponse(item.ID, item.Name, item.Price, item.Deleted))
 	} else {
 		// Нет полей для обновления - возвращаем текущий товар
 		existingItem, err := h.queries.GetItem(c.Request.Context(), int32(id))
@@ -307,20 +333,8 @@ func (h *Handler) PatchItem(c *gin.Context) {
 			c.JSON(http.StatusNotModified, ErrorResponse{Message: "Item with id=" + c.Param("id") + " not found or is deleted"})
 			return
 		}
-		c.JSON(http.StatusOK, itemToResponse(existingItem))
-		return
+		c.JSON(http.StatusOK, rowToItemResponse(existingItem.ID, existingItem.Name, existingItem.Price, existingItem.Deleted))
 	}
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotModified, ErrorResponse{Message: "Item with id=" + c.Param("id") + " not found or is deleted"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Message: err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, itemToResponse(item))
 }
 
 // DeleteItem godoc
@@ -416,17 +430,17 @@ func (h *Handler) GetCarts(c *gin.Context) {
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 
-	var minPrice, maxPrice sql.NullString
+	var minPrice, maxPrice sql.NullFloat64
 	var minQuantity, maxQuantity sql.NullInt32
 
 	if minPriceStr := c.Query("min_price"); minPriceStr != "" {
-		if _, err := strconv.ParseFloat(minPriceStr, 64); err == nil {
-			minPrice = sql.NullString{String: minPriceStr, Valid: true}
+		if val, err := strconv.ParseFloat(minPriceStr, 64); err == nil {
+			minPrice = sql.NullFloat64{Float64: val, Valid: true}
 		}
 	}
 	if maxPriceStr := c.Query("max_price"); maxPriceStr != "" {
-		if _, err := strconv.ParseFloat(maxPriceStr, 64); err == nil {
-			maxPrice = sql.NullString{String: maxPriceStr, Valid: true}
+		if val, err := strconv.ParseFloat(maxPriceStr, 64); err == nil {
+			maxPrice = sql.NullFloat64{Float64: val, Valid: true}
 		}
 	}
 	if minQtyStr := c.Query("min_quantity"); minQtyStr != "" {

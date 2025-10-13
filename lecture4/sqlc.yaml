@@ -10,11 +10,3 @@ sql:
         emit_json_tags: true
         emit_interface: false
         emit_exact_table_names: false
-        overrides:
-          - column: "items.price"
-            go_type: "float64"
-          - db_type: "pg_catalog.numeric"
-            go_type: "float64"
-          - db_type: "pg_catalog.int8"
-            go_type: "int64"
-
