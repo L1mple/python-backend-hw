@@ -1,0 +1,48 @@
+services:
+
+  shop-api:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: local
+    restart: always
+    ports:
+      - 8080:8080
+    volumes:
+      - ./shop.db:/app/shop.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 3000:3000
+    restart: always
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./settings/prometheus/:/etc/prometheus/
+      - prometheus-storage:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - 9090:9090
+    restart: always
+
+volumes:
+  grafana-storage:
+  prometheus-storage:
+
