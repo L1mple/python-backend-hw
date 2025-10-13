@@ -8,6 +8,20 @@
 
 Сдача через PR, так же нужно:
 
-1) Dockerfile для сборки сервиса
-2) docker-compose.yml для локального разворачивания в Docker
-3) Приложить скрин с парой Дашбордов в Grafana
+
+### 1) Dockerfile для сборки сервиса
+Done , не особо менял Ваш :) 
+
+### 2) docker-compose.yml для локального разворачивания в Docker
+
+Done , не особо менял Ваш :) 
+
+### 3) Приложить скрин с парой Дашбордов в Grafana
+
+Done
+
+json код в settings/grafana/dashboards.json
+
+Скриншот 
+
+![Alt text](dashboards.png)
