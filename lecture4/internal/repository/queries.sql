@@ -82,21 +82,21 @@ DO UPDATE SET quantity = cart_items.quantity + 1
 RETURNING *;
 
 -- name: GetCartTotalPrice :one
-SELECT COALESCE(SUM(ci.quantity * i.price), 0) as total
+SELECT COALESCE(SUM(ci.quantity * i.price), 0)::numeric as total
 FROM cart_items ci
 JOIN items i ON ci.item_id = i.id
 WHERE ci.cart_id = $1 AND i.deleted = FALSE;
 
 -- name: GetCartTotalQuantity :one
-SELECT COALESCE(SUM(ci.quantity), 0) as total
+SELECT COALESCE(SUM(ci.quantity), 0)::bigint as total
 FROM cart_items ci
 WHERE ci.cart_id = $1;
 
 -- name: GetAllCartsWithStats :many
 SELECT 
     c.id,
-    COALESCE(SUM(ci.quantity), 0) as total_quantity,
-    COALESCE(SUM(CASE WHEN i.deleted = FALSE THEN ci.quantity * i.price ELSE 0 END), 0) as total_price
+    COALESCE(SUM(ci.quantity), 0)::bigint as total_quantity,
+    COALESCE(SUM(CASE WHEN i.deleted = FALSE THEN ci.quantity * i.price ELSE 0 END), 0)::numeric as total_price
 FROM carts c
 LEFT JOIN cart_items ci ON c.id = ci.cart_id
 LEFT JOIN items i ON ci.item_id = i.id

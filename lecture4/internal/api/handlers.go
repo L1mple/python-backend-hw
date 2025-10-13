@@ -24,28 +24,6 @@ func NewHandler(db *sql.DB) *Handler {
 	}
 }
 
-// convertToFloat64 преобразует interface{} из базы данных в float64
-func convertToFloat64(value interface{}) float64 {
-	if value == nil {
-		return 0
-	}
-
-	switch v := value.(type) {
-	case float64:
-		return v
-	case string:
-		result, _ := strconv.ParseFloat(v, 64)
-		return result
-	case []byte:
-		result, _ := strconv.ParseFloat(string(v), 64)
-		return result
-	case int64:
-		return float64(v)
-	default:
-		return 0
-	}
-}
-
 // itemToResponse преобразует модель Item в ItemResponse
 func itemToResponse(item repository.Item) ItemResponse {
 	return ItemResponse{
@@ -91,12 +69,11 @@ func (h *Handler) buildCartResponse(ctx context.Context, cartID int32) (CartResp
 		return CartResponse{}, err
 	}
 
-	totalPriceRaw, err := h.queries.GetCartTotalPrice(ctx, cartID)
+	totalPrice, err := h.queries.GetCartTotalPrice(ctx, cartID)
 	if err != nil {
 		return CartResponse{}, err
 	}
 
-	totalPrice := convertToFloat64(totalPriceRaw)
 	items := cartItemsToResponse(cartItems)
 
 	return CartResponse{
@@ -499,12 +476,11 @@ func (h *Handler) GetCarts(c *gin.Context) {
 	result := make([]CartResponse, 0, len(carts))
 	for _, cart := range carts {
 		items := cartItemsForCartsToResponse(cartItemsMap[cart.ID])
-		totalPrice := convertToFloat64(cart.TotalPrice)
 
 		result = append(result, CartResponse{
 			ID:    cart.ID,
 			Items: items,
-			Price: totalPrice,
+			Price: cart.TotalPrice,
 		})
 	}
 
