@@ -4,6 +4,7 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 from shop_api.models.cart import CartLineOut, CartOut
 from shop_api.models.item import ItemRecord
@@ -13,7 +14,6 @@ from shop_api.storage.psql_sqlalchemy import (
     get_cart as psql_get_cart,
     list_carts as psql_list_carts,
     add_to_cart as psql_add_to_cart,
-    list_items as psql_list_items,
     get_items_by_ids as psql_get_items_by_ids,
 )
 
@@ -35,7 +35,8 @@ async def create_cart(deps=Depends(get_store)):
 async def get_cart(cart_id: int, deps=Depends(get_store)):
     cart = psql_get_cart(cart_id)
     if cart is None:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="cart not found")
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND,
+                            detail="cart not found")
     cart = {int(k): int(v) for k, v in cart.items()} if cart else {}
     item_ids = list(cart.keys()) if cart else []
     items_list = psql_get_items_by_ids(item_ids) if item_ids else []
@@ -62,7 +63,27 @@ async def list_carts(
     deps=Depends(get_store),
 ):
     rows = psql_list_carts()
-    items_list = psql_list_items(show_deleted=False)
+    # Собираем все уникальные ID товаров из всех корзин
+    all_item_ids = set()
+    for r in rows:
+        cart = r.get("cart") if isinstance(r, dict) else r.cart
+        if cart:
+            cart = (
+                {
+                    int(k): int(v)
+                    for k, v in (
+                        cart.items() if isinstance(cart, dict) else cart
+                    )
+                }
+                if cart
+                else {}
+            )
+            all_item_ids.update(cart.keys())
+
+    # Получаем информацию о всех товарах, которые есть в корзинах
+    items_list = (
+        psql_get_items_by_ids(list(all_item_ids)) if all_item_ids else []
+    )
     items = {
         i["id"]: ItemRecord(
             name=i["name"],
@@ -94,7 +115,7 @@ async def list_carts(
         if max_quantity is not None and resp.quantity > max_quantity:
             continue
         outs.append(resp)
-    return outs[offset : offset + limit]
+    return outs[offset: offset + limit]
 
 
 @router.post("/{cart_id}/add/{item_id}")
@@ -103,10 +124,14 @@ async def add_to_cart(cart_id: int, item_id: int, deps=Depends(get_store)):
         cart = psql_add_to_cart(cart_id, item_id)
     except ValueError as e:
         raise HTTPException(HTTPStatus.BAD_REQUEST, str(e))
+    except IntegrityError:
+        raise HTTPException(HTTPStatus.NOT_FOUND, "cart or item not found")
     if cart is None:
         raise HTTPException(HTTPStatus.NOT_FOUND, "cart or item not found")
 
-    items_list = psql_list_items(show_deleted=False)
+    # Получаем только товары, которые есть в корзине
+    item_ids = list(cart.keys()) if cart else []
+    items_list = psql_get_items_by_ids(item_ids) if item_ids else []
     items = {
         i["id"]: ItemRecord(
             name=i["name"],
@@ -138,4 +163,6 @@ def build_cart_response(
         )
         total_price += line_total
         total_quantity += quantity
-    return CartOut(id=cart_id, items=lines, price=total_price, quantity=total_quantity)
+    return CartOut(
+        id=cart_id, items=lines, price=total_price, quantity=total_quantity
+    )

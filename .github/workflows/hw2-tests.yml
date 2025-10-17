@@ -40,7 +40,7 @@ jobs:
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
         DATABASE_URL: postgresql+psycopg2://test-user:test-pass@localhost:5542/test-db
       run: |
-        pytest test_homework2.py -v
+        pytest --cov=shop_api.handlers --cov-report=term-missing test_homework2.py -v
     
     - name: Run sql anomalies
       working-directory: hw2/hw

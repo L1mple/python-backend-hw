@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
 from fastapi import FastAPI
 import pydantic
@@ -9,11 +10,14 @@ from shop_api.handlers import router
 from shop_api.storage.psql_sqlalchemy import init_engine, create_schema
 
 
-def lifespan(app):
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     init_engine()
     create_schema()
     print("Database initialized", "Shema created")
     yield
+    # Shutdown (если нужно что-то делать при завершении)
 
 
 VERSION = "1.0.0"
