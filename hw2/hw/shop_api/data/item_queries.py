@@ -1,96 +1,155 @@
 from typing import Iterable
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import (
-    ItemInfo,
-    ItemEntity,
-    PatchItemInfo,
-)
-
-_data = dict[int, ItemInfo]()
+from .models import ItemInfo, ItemEntity, PatchItemInfo
+from .db_models import ItemDB
 
 
-def int_id_generator() -> Iterable[int]:
-    i = 0
-    while True:
-        yield i
-        i += 1
+async def add(session: AsyncSession, info: ItemInfo) -> ItemEntity:
+    """Create new item"""
+    item_db = ItemDB(name=info.name, price=info.price, deleted=info.deleted)
+
+    session.add(item_db)  # добавляем в сессию и сохранение
+    await session.flush()  # получаем ID без commit
+
+    return ItemEntity(id=item_db.id, info=info)
 
 
-_id_generator = int_id_generator()
+async def delete(session: AsyncSession, id: int) -> ItemEntity | None:
+    """Marks item as deleted"""
 
+    result = await session.execute(
+        select(ItemDB).where(ItemDB.id == id)
+    )  # получаем товар из БД
+    item_db = result.scalar_one_or_none()  # получаем одну запись
 
-def add(info: ItemInfo) -> ItemEntity:
-    _id = next(_id_generator)
-    _data[_id] = info
-
-    return ItemEntity(_id, info)
-
-
-def delete(id: int) -> ItemEntity | None:
-    if id not in _data:
+    if item_db is None:
         return None
 
-    _data[id].deleted = True
-    return ItemEntity(id=id, info=_data[id])
+    item_db.deleted = True
+    await session.flush()
+
+    return ItemEntity(
+        id=item_db.id,
+        info=ItemInfo(name=item_db.name, price=item_db.price, deleted=item_db.deleted),
+    )
 
 
-def get_one(id: int) -> ItemEntity | None:
-    if id not in _data:
+async def get_one(session: AsyncSession, id: int) -> ItemEntity | None:
+    """Get item by ID"""
+    result = await session.execute(select(ItemDB).where(ItemDB.id == id))
+    item_db = result.scalar_one_or_none()
+
+    if item_db is None:
         return None
 
-    return ItemEntity(id=id, info=_data[id])
+    return ItemEntity(
+        id=item_db.id,
+        info=ItemInfo(name=item_db.name, price=item_db.price, deleted=item_db.deleted),
+    )
 
 
-def get_many(
+async def get_many(
+    session: AsyncSession,
     offset: int = 0,
     limit: int = 10,
     min_price: float | None = None,
     max_price: float | None = None,
     show_deleted: bool = False,
-) -> Iterable[ItemEntity]:
-    curr = 0
-    for id, info in _data.items():
-        if not show_deleted and info.deleted:
-            continue
+) -> list[ItemEntity]:
+    """Get many items by query params"""
 
-        if min_price is not None and info.price < min_price:
-            continue
+    query = select(ItemDB)
 
-        if max_price is not None and info.price > max_price:
-            continue
+    # Фильтры
+    if not show_deleted:
+        query = query.where(ItemDB.deleted == False)
 
-        if offset <= curr < offset + limit:
-            yield ItemEntity(id, info)
+    if min_price is not None:
+        query = query.where(ItemDB.price >= min_price)
 
-        curr += 1
+    if max_price is not None:
+        query = query.where(ItemDB.price <= max_price)
+
+    # Пагинация
+    query = query.offset(offset).limit(limit)
+
+    # Выполнение запроса
+    result = await session.execute(query)
+    items_db = result.scalars().all()
+
+    return [
+        ItemEntity(
+            id=item_db.id,
+            info=ItemInfo(
+                name=item_db.name, price=item_db.price, deleted=item_db.deleted
+            ),
+        )
+        for item_db in items_db
+    ]
 
 
-def update(id: int, info: ItemInfo) -> ItemEntity | None:
-    if id not in _data:
+async def update(session: AsyncSession, id: int, info: ItemInfo) -> ItemEntity | None:
+    """Update item by ID"""
+    result = await session.execute(select(ItemDB).where(ItemDB.id == id))
+    item_db = result.scalar_one_or_none()
+
+    if item_db is None:
         return None
 
-    _data[id] = info
+    item_db.name = info.name
+    item_db.price = info.price
+    item_db.deleted = info.deleted
 
-    return ItemEntity(id=id, info=info)
+    await session.flush()
 
-
-def upsert(id: int, info: ItemInfo) -> ItemEntity:
-    _data[id] = info
-
-    return ItemEntity(id=id, info=info)
+    return ItemEntity(id=item_db.id, info=info)
 
 
-def patch(id: int, patch_info: PatchItemInfo) -> ItemEntity | None:
-    if id not in _data:
+async def upsert(session: AsyncSession, id: int, info: ItemInfo) -> ItemEntity:
+    """Upsert item by ID"""
+    result = await session.execute(select(ItemDB).where(ItemDB.id == id))
+    item_db = result.scalar_one_or_none()
+
+    if item_db is None:
+        # Создание нового товара с заданным ID
+        item_db = ItemDB(id=id, name=info.name, price=info.price, deleted=info.deleted)
+        session.add(item_db)
+    else:
+        # Обновление существующего товара
+        item_db.name = info.name
+        item_db.price = info.price
+        item_db.deleted = info.deleted
+
+    await session.flush()
+
+    return ItemEntity(id=item_db.id, info=info)
+
+
+async def patch(
+    session: AsyncSession, id: int, patch_info: PatchItemInfo
+) -> ItemEntity | None:
+    """Patch item by ID"""
+    result = await session.execute(select(ItemDB).where(ItemDB.id == id))
+    item_db = result.scalar_one_or_none()
+
+    if item_db is None:
         return None
 
+    # Обновление только указанных полей
     if patch_info.name is not None:
-        _data[id].name = patch_info.name
+        item_db.name = patch_info.name
 
     if patch_info.price is not None:
-        _data[id].price = patch_info.price
+        item_db.price = patch_info.price
 
     if patch_info.deleted is not None:
-        _data[id].deleted = patch_info.deleted
+        item_db.deleted = patch_info.deleted
 
-    return ItemEntity(id=id, info=_data[id])
+    await session.flush()
+
+    return ItemEntity(
+        id=item_db.id,
+        info=ItemInfo(name=item_db.name, price=item_db.price, deleted=item_db.deleted),
+    )
