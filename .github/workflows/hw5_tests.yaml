@@ -21,38 +21,32 @@ jobs:
         python-version: '3.10'
         cache: 'pip'
 
-    - name: Install Docker Compose
-      run: |
-        sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
-        docker-compose --version
-
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         cd hw2/hw
-        pip install -r requiremets.txt
-        pip install pytest pytest-cov pytest-asyncio requests
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio requests uvicorn
 
-    - name: Start all services with docker-compose
+    - name: Start FastAPI app in background
       run: |
         cd hw2/hw
-        docker-compose up -d
-        sleep 30  # Даем время всем сервисам запуститься
+        python -c "from shop_api.main import app; import uvicorn; uvicorn.run(app, host='0.0.0.0', port=8080)" &
+        echo "FastAPI app starting..."
+        sleep 3
 
+    - name: Check app health
+      run: |
+        curl -f http://localhost:8080/ || exit 1
+        echo "✅ FastAPI app is healthy"
 
     - name: Run homework tests
       run: |
         cd hw2/hw
-        pytest test_my_test.py -v
+        pytest test_my_test.py -v --cov=. --cov-report=term-missing
 
     - name: Stop services
       if: always()
       run: |
-        cd hw2/hw
-        docker-compose down
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
+        # Останавливаем все процессы на порту 8080
+        pkill -f "uvicorn" || true

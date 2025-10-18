@@ -20,7 +20,7 @@ class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
             return float(obj)
-        return super(DecimalEncoder, self).default(obj)
+        #return super(DecimalEncoder, self).default(obj)
 
 
 # Модели данных
@@ -486,8 +486,9 @@ async def create_item(item_data: dict):
             )
 
         # Создаем товар
-        if float(item_data['price']) < 0:
-            raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY)
+        if 'price' in item_data:
+            if float(item_data['price']) < 0:
+                raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY)
         item_id = await db_conn.fetchval(
             """INSERT INTO products (name, price, deleted) 
                VALUES ($1, $2, false) RETURNING id""",
@@ -547,8 +548,9 @@ async def update_item(item_id: int, item_data: dict):
                 status_code=422,
                 detail="Name and price are required for PUT"
             )
-        if float(item_data['price']) < 0:
-            raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY)
+        if 'price' in item_data:
+            if float(item_data['price']) < 0:
+                raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY)
         # Обновляем товар
         await db_conn.execute(
             "UPDATE products SET name = $1, price = $2 WHERE id = $3",
@@ -574,8 +576,6 @@ async def update_item(item_id: int, item_data: dict):
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating item: {str(e)}")
     finally:
         await db_conn.close()
 
@@ -604,8 +604,6 @@ async def patch_item(item_id: int, item_data: dict):
                 status_code=422,
                 detail=f"Extra fields not allowed: {extra_fields}"
             )
-        if float(item_data['price']) < 0:
-            raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY)
         # Если тело пустое - возвращаем текущий товар без изменений
         if not item_data:
             response = {
@@ -661,8 +659,6 @@ async def patch_item(item_id: int, item_data: dict):
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error patching item: {str(e)}")
     finally:
         await db_conn.close()
 
@@ -694,6 +690,3 @@ async def delete_item(item_id: int):
     finally:
         await db_conn.close()
 
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
