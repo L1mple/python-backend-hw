@@ -32,9 +32,3 @@ CREATE INDEX IF NOT EXISTS idx_carts_created_at ON carts(created_at);
 CREATE INDEX IF NOT EXISTS idx_products_deleted ON products(deleted);
 CREATE INDEX IF NOT EXISTS idx_products_price ON products(price);
 
--- Тестовые данные
-INSERT INTO products (name, price) VALUES
-    ('Телефон', 599.99),
-    ('Ноутбук', 1299.99),
-    ('Наушники', 199.99)
-ON CONFLICT DO NOTHING;

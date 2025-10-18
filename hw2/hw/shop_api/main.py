@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response, Query, HTTPException, Depends
+from fastapi import FastAPI, Response, Query, HTTPException
 from typing import Optional, List
 import uvicorn
 import json
@@ -12,7 +12,6 @@ from datetime import datetime
 from pydantic import BaseModel
 from fastapi.encoders import jsonable_encoder
 from decimal import Decimal
-import decimal
 
 app = FastAPI(title="Shop API")
 Instrumentator().instrument(app).expose(app)
@@ -135,7 +134,7 @@ async def get_cart_with_cache(cart_id: int) -> Optional[dict]:
 
         return cart_data
     finally:
-        await redis_conn.close()
+        await redis_conn.aclose()
 
 
 async def invalidate_cart_cache(cart_id: int):
@@ -144,7 +143,7 @@ async def invalidate_cart_cache(cart_id: int):
     try:
         await redis_conn.delete(f"cart:{cart_id}")
     finally:
-        await redis_conn.close()
+        await redis_conn.aclose()
 
 
 async def get_item_from_db(item_id: int) -> Optional[dict]:
@@ -435,8 +434,15 @@ async def get_items(
         if where_conditions:
             query += " WHERE " + " AND ".join(where_conditions)
 
-        # Сортировка и пагинация
-        query += " ORDER BY id LIMIT $1 OFFSET $2"
+        # Сортировка
+        query += " ORDER BY id"
+
+        # Теперь правильно добавляем пагинацию
+        # Сначала считаем общее количество параметров
+        total_params = len(params)
+
+        # Добавляем LIMIT и OFFSET с правильными номерами параметров
+        query += f" LIMIT ${total_params + 1} OFFSET ${total_params + 2}"
         params.extend([limit, offset])
 
         items = await db_conn.fetch(query, *params)
@@ -475,6 +481,8 @@ async def create_item(item_data: dict):
             )
 
         # Создаем товар
+        if float(item_data['price']) < 0:
+            raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY)
         item_id = await db_conn.fetchval(
             """INSERT INTO products (name, price, deleted) 
                VALUES ($1, $2, false) RETURNING id""",
@@ -534,7 +542,8 @@ async def update_item(item_id: int, item_data: dict):
                 status_code=422,
                 detail="Name and price are required for PUT"
             )
-
+        if float(item_data['price']) < 0:
+            raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY)
         # Обновляем товар
         await db_conn.execute(
             "UPDATE products SET name = $1, price = $2 WHERE id = $3",
@@ -590,7 +599,8 @@ async def patch_item(item_id: int, item_data: dict):
                 status_code=422,
                 detail=f"Extra fields not allowed: {extra_fields}"
             )
-
+        if float(item_data['price']) < 0:
+            raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY)
         # Если тело пустое - возвращаем текущий товар без изменений
         if not item_data:
             response = {
