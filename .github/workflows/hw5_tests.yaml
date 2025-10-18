@@ -102,7 +102,7 @@ jobs:
     - name: Run homework tests
       run: |
         cd hw2/hw
-        pytest test_my_test.py -v
+        pytest pytest test_my_test.py -v --cov=. --cov-report=term-missing
 
     - name: Stop FastAPI app
       if: always()
