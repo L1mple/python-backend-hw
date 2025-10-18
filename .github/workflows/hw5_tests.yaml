@@ -1,0 +1,111 @@
+name: Vlad's tests
+
+on:
+  push:
+    branches: [ main, develop, hw2 ]
+    paths: [ 'hw2/hw/**' ]
+  pull_request:
+    branches: [ main, develop, hw2 ]
+    paths: [ 'hw2/hw/**' ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: shop
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+      prometheus:
+        image: prom/prometheus
+        ports:
+          - 9090:9090
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      grafana:
+        image: grafana/grafana
+        ports:
+          - 3000:3000
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd hw2/hw
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio requests uvicorn asyncpg redis
+
+    - name: Install redis-cli
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y redis-tools
+
+    - name: Wait for databases to be ready
+      run: |
+        echo "Waiting for PostgreSQL..."
+        until pg_isready -h localhost -p 5432; do sleep 1; done
+        echo "Waiting for Redis..."
+        until redis-cli -h localhost ping | grep -q PONG; do sleep 1; done
+        echo "✅ All databases are ready"
+
+    - name: Start FastAPI app in background
+      run: |
+        cd hw2/hw
+        python -m uvicorn shop_api.main:app --host 0.0.0.0 --port 8080 &
+        echo "FastAPI app starting..."
+        sleep 15
+
+    - name: Check app health
+      run: |
+        echo "Checking if FastAPI app is healthy..."
+        curl -f http://localhost:8080/ || (echo "❌ FastAPI app not healthy"; exit 1)
+        echo "✅ FastAPI app is healthy"
+
+    - name: Run homework tests
+      run: |
+        cd hw2/hw
+        pytest test_my_test.py -v --cov=. --cov-report=term-missing
+
+    - name: Stop FastAPI app
+      if: always()
+      run: |
+        echo "Stopping FastAPI app..."
+        pkill -f "uvicorn" || true
