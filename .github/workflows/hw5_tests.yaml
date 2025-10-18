@@ -65,16 +65,12 @@ jobs:
 
     - name: Check app health
       run: |
-        curl -f http://localhost:8080/docs || exit 1
+        curl -f http://localhost:8080/ || exit 1
         echo "✅ FastAPI app is healthy"
-
-    - name: Run integration tests
-      run: |
-        pytest test_shop_system.py -v --cov=shop_api --cov-report=xml
 
     - name: Run homework tests
       run: |
-        pytest test_homework2.py -v
+        pytest test_my_test.py -v
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3

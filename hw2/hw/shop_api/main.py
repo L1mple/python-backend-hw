@@ -168,6 +168,11 @@ async def get_item_from_db(item_id: int) -> Optional[dict]:
         await db_conn.close()
 
 
+@app.get("/")
+async def root():
+    return {"status": "ok"}
+
+
 ### CART ENDPOINTS
 
 @app.post("/cart")
