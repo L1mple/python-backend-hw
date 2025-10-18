@@ -49,27 +49,29 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r hw2/hw/requiremets.txt
+        pip install -r hw2/hw/requirements.txt
         pip install pytest pytest-cov pytest-asyncio asyncpg redis requests
         pip install uvicorn fastapi prometheus-fastapi-instrumentator
 
     - name: Wait for services
       run: |
-        sleep 5
+        sleep 10
 
     - name: Start FastAPI app in background
       run: |
-        python -m uvicorn hw2/hw/shop_api.main:app --host 0.0.0.0 --port 8080 &
+        cd hw2/hw
+        python -m uvicorn shop_api.main:app --host 0.0.0.0 --port 8080 &
         echo "FastAPI app starting..."
-        sleep 5
+        sleep 10
 
     - name: Check app health
       run: |
-        curl -f http://localhost:8080/ || exit 1
+        curl -f http://localhost:8080/health || curl -f http://localhost:8080/ || exit 1
         echo "✅ FastAPI app is healthy"
 
     - name: Run homework tests
       run: |
+        cd hw2/hw
         pytest test_my_test.py -v
 
     - name: Upload coverage to Codecov
