@@ -24,6 +24,31 @@ REST API для управления интернет-магазином с по
 pip install -r requirements.txt
 ```
 
+## Настройка базы данных PostgreSQL
+
+Для работы с базой данных используется PostgreSQL через Docker.
+
+### Запуск PostgreSQL
+
+```bash
+cd ./python-backend-hw/hw2/hw
+docker-compose up -d postgres
+```
+
+### Проверка подключения
+
+```bash
+psql -h localhost -p 5432 -U admin -d shop_db
+```
+
+### Параметры подключения по умолчанию
+
+- **Host:** localhost
+- **Port:** 5432
+- **Database:** shop_db
+- **User:** admin
+- **Password:** admin
+
 ## Запуск
 
 ```bash
@@ -341,11 +366,22 @@ hw2/hw/
 │   │       ├── __init__.py
 │   │       ├── routes.py          # HTTP эндпоинты (REST)
 │   │       └── contracts.py       # Pydantic модели запросов/ответов
-│   └── data/
-│       ├── __init__.py
-│       ├── models.py              # Доменные модели
-│       ├── item_queries.py        # Работа с товарами (in-memory)
-│       └── cart_queries.py        # Работа с корзинами (in-memory)
+│   ├── data/
+│   │   ├── __init__.py
+│   │   ├── db_models.py           # SQLAlchemy модели (БД)
+│   │   ├── item_queries.py        # Работа с товарами (PostgreSQL)
+│   │   └── cart_queries.py        # Работа с корзинами (PostgreSQL)
+│   ├── transaction_scripts/       # Демонстрация уровней изоляции
+│   │   ├── README.md              # Документация транзакций
+│   │   ├── config.py              # Конфигурация БД
+│   │   ├── models.py              # Модели для демонстраций
+│   │   ├── 0_dirty_read_solved.py
+│   │   ├── 1_non_repeatable_read_problem.py
+│   │   ├── 2_non_repeatable_read_solved.py
+│   │   ├── 3_phantom_read_problem.py
+│   │   └── 4_phantom_read_solved.py
+│   └── alembic/                   # Миграции базы данных
+│       └── versions/
 │
 ├── chat/                          # WebSocket чат
 │   ├── __init__.py
@@ -507,7 +543,40 @@ python generate_errors.py continuous 600
 ```
 
 **Что генерирует скрипт:**
-- ✅ Успешные запросы (2xx) — создание items, чтение списков
-- ❌ 404 ошибки — запросы несуществующих items/carts
-- ⚠️ 422 ошибки — невалидные query параметры
-- 🐌 Медленные запросы — `/item/slow?delay=5` для Active Connections
+- Успешные запросы (2xx) — создание items, чтение списков
+- 404 ошибки — запросы несуществующих items/carts
+- 422 ошибки — невалидные query параметры
+- Медленные запросы — `/item/slow?delay=5` для Active Connections
+
+---
+
+## Транзакции и уровни изоляции
+
+### Демонстрационные скрипты
+
+Проект включает демонстрационные скрипты для изучения уровней изоляции транзакций PostgreSQL. Скрипты показывают проблемы параллельного доступа и способы их решения.
+
+#### Запуск демонстраций
+
+**Вариант 1: Из директории `shop_api`**
+```bash
+cd ./python-backend-hw/hw2/hw/shop_api
+
+python -m transaction_scripts.0_dirty_read_solved
+python -m transaction_scripts.1_non_repeatable_read_problem
+python -m transaction_scripts.2_non_repeatable_read_solved
+python -m transaction_scripts.3_phantom_read_problem
+python -m transaction_scripts.4_phantom_read_solved
+```
+
+**Вариант 2: Из директории `transaction_scripts`**
+```bash
+cd ./python-backend-hw/hw2/hw/shop_api/transaction_scripts
+
+python 0_dirty_read_solved.py
+python 1_non_repeatable_read_problem.py
+python 2_non_repeatable_read_solved.py
+python 3_phantom_read_problem.py
+python 4_phantom_read_solved.py
+```
+

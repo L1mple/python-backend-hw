@@ -24,7 +24,7 @@ cart_items_table = Table(
 
 
 class ItemDB(Base):
-    """Модель товара в базе данных"""
+    """Model of an item in the database"""
 
     __tablename__ = "items"
 
@@ -39,12 +39,11 @@ class ItemDB(Base):
     )
 
     def __repr__(self):
-        """Представление модели в виде строки"""
         return f"<ItemDB(id={self.id}, name={self.name}, price={self.price}, deleted={self.deleted})>"
 
 
 class CartDB(Base):
-    """Модель корзины в базе данных"""
+    """Model of a cart in the database"""
 
     __tablename__ = "carts"
 
@@ -57,5 +56,4 @@ class CartDB(Base):
     )
 
     def __repr__(self):
-        """Представление модели в виде строки"""
         return f"<CartDB(id={self.id}, price={self.price})>"

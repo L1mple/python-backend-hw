@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Обновление схемы базы данных"""
+    """Upgrade schema."""
     # Создание таблицы items
     op.create_table(
         'items',
@@ -51,7 +51,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Схема для отката миграции"""
+    """Downgrade schema."""
     # Удаление таблицы в обратном порядке
     op.drop_table('cart_items')
     op.drop_table('carts')

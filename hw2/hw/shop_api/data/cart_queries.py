@@ -1,4 +1,3 @@
-from typing import Iterable
 from sqlalchemy import select, delete as sql_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
