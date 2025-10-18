@@ -48,8 +48,9 @@ jobs:
 
     - name: Install dependencies
       run: |
+        cd hw2/hw
         python -m pip install --upgrade pip
-        pip install -r hw2/hw/requirements.txt
+        pip install -r requirements.txt
         pip install pytest pytest-cov pytest-asyncio asyncpg redis requests
         pip install uvicorn fastapi prometheus-fastapi-instrumentator
 
