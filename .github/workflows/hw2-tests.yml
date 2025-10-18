@@ -46,6 +46,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Run database migrations
+      working-directory: hw2/hw/shop_api
+      env:
+        DATABASE_URL: postgresql+asyncpg://admin:admin@localhost:5432/shop_db
+      run: |
+        alembic upgrade head
+
     - name: Run tests
       working-directory: hw2/hw
       env:
