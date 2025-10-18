@@ -7,35 +7,35 @@
 ## Подготовка окружения
 
 1. Скопируйте `.env.example` и настройте параметры подключения:
-   ```bash
-   cp .env.example .env
-````
+```bash
+cp .env.example .env
+```
 
 2. Поднимите контейнер с PostgreSQL:
 
-   ```bash
-   docker compose up -d db
-   ```
+```bash
+docker compose up -d db
+```
 
 3. Установите зависимости:
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
 4. Выполните миграции:
 
-   ```bash
-   alembic upgrade head
-   ```
+```bash
+alembic upgrade head
+```
 
 5. (Опционально) запустите FastAPI-сервис:
 
-   ```bash
-   uvicorn shop_api.main:app --reload
-   ```
+```bash
+uvicorn shop_api.main:app --reload
+```
 
-   Документация будет доступна по адресу: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+Документация будет доступна по адресу: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ---
 
@@ -71,7 +71,7 @@ scripts/
 
 ## Последовательность запуска
 
-> Все сценарии работают напрямую с базой данных, запуск FastAPI не обязателен.
+Все сценарии работают напрямую с базой данных, запуск FastAPI не обязателен.
 
 Очистка и заполнение тестовыми данными:
 
