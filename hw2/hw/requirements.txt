@@ -11,3 +11,9 @@ Faker>=37.8.0
 # Для выполнения дополнительного задания
 #websockets==15.0.1
 #uvicorn[standard]
+
+# DB & migrations
+SQLAlchemy>=2.0.32
+alembic>=1.13.2
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.1

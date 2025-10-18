@@ -1,8 +1,16 @@
-from fastapi import FastAPI, HTTPException, Query, Body, status, Response
+from __future__ import annotations
+
+from decimal import Decimal
 from typing import List, Optional
 
-from .models import ItemCreate, ItemUpdate, ItemPatch, ItemOut, CartOut
-from .storage import ITEMS, CARTS, next_item_id, next_cart_id, compute_cart
+from fastapi import FastAPI, HTTPException, Query, Body, status, Response, Depends
+
+from sqlalchemy import select, update, func
+from sqlalchemy.orm import Session
+
+from .models import ItemCreate, ItemUpdate, ItemPatch, ItemOut, CartOut, CartItemOut
+from .db import get_db
+from .orm import Item, Cart, CartItem
 
 # ----- WebSocket chat -----
 from typing import Dict
@@ -10,30 +18,53 @@ from uuid import uuid4
 from fastapi import WebSocket, WebSocketDisconnect
 
 
-app = FastAPI(title="Shop API")
+app = FastAPI(title="Shop API (DB-backed)")
 
+# ---------- helpers ----------
 
-# ----- Item endpoints -----
+def _dec_to_float(v: Decimal | float | int) -> float:
+    return float(v) if isinstance(v, Decimal) else float(v)
+
+def _item_to_out(i: Item) -> ItemOut:
+    return ItemOut(id=i.id, name=i.name, price=_dec_to_float(i.price), deleted=i.deleted)
+
+def _cart_to_out(db: Session, cart: Cart) -> CartOut:
+    # соберём элементы корзины и цену
+    # items подцеплены через relationship selectin/joined
+    items_out: List[CartItemOut] = []
+    total_price: float = 0.0
+    for ci in cart.items:
+        available = not ci.item.deleted
+        items_out.append(
+            CartItemOut(
+                id=ci.item_id,
+                name=ci.item.name,
+                quantity=ci.quantity,
+                available=available,
+            )
+        )
+        if available:
+            total_price += _dec_to_float(ci.item.price) * ci.quantity
+
+    return CartOut(id=cart.id, items=items_out, price=total_price)
+
+# ---------- Item endpoints ----------
+
 @app.post("/item", response_model=ItemOut, status_code=status.HTTP_201_CREATED)
-def create_item(item: ItemCreate, response: Response):
-    item_id = next_item_id()
-    ITEMS[item_id] = {
-        "id": item_id,
-        "name": item.name,
-        "price": item.price,
-        "deleted": False,
-    }
-    response.headers["Location"] = f"/item/{item_id}"
-    return ITEMS[item_id]
-
+def create_item(item: ItemCreate, response: Response, db: Session = Depends(get_db)):
+    obj = Item(name=item.name, price=item.price, deleted=False)
+    db.add(obj)
+    db.flush()  # чтобы получить id
+    response.headers["Location"] = f"/item/{obj.id}"
+    db.refresh(obj)
+    return _item_to_out(obj)
 
 @app.get("/item/{item_id}", response_model=ItemOut)
-def get_item(item_id: int):
-    item = ITEMS.get(item_id)
-    if not item or item["deleted"]:
+def get_item(item_id: int, db: Session = Depends(get_db)):
+    obj = db.get(Item, item_id)
+    if not obj or obj.deleted:
         raise HTTPException(status_code=404, detail="Item not found")
-    return item
-
+    return _item_to_out(obj)
 
 @app.get("/item", response_model=List[ItemOut])
 def list_items(
@@ -42,71 +73,84 @@ def list_items(
     min_price: Optional[float] = Query(None, ge=0.0),
     max_price: Optional[float] = Query(None, ge=0.0),
     show_deleted: bool = Query(False),
+    db: Session = Depends(get_db),
 ):
-    items = list(ITEMS.values())
+    stmt = select(Item)
     if not show_deleted:
-        items = [i for i in items if not i["deleted"]]
+        stmt = stmt.where(Item.deleted.is_(False))
     if min_price is not None:
-        items = [i for i in items if i["price"] >= min_price]
+        stmt = stmt.where(Item.price >= Decimal(str(min_price)))
     if max_price is not None:
-        items = [i for i in items if i["price"] <= max_price]
-
-    return items[offset : offset + limit]
-
+        stmt = stmt.where(Item.price <= Decimal(str(max_price)))
+    stmt = stmt.offset(offset).limit(limit)
+    rows = db.execute(stmt).scalars().all()
+    return [_item_to_out(r) for r in rows]
 
 @app.put("/item/{item_id}", response_model=ItemOut)
-def update_item(item_id: int, data: ItemUpdate):
-    if item_id not in ITEMS or ITEMS[item_id]["deleted"]:
+def update_item(item_id: int, data: ItemUpdate, db: Session = Depends(get_db)):
+    obj = db.get(Item, item_id)
+    if not obj or obj.deleted:
         raise HTTPException(status_code=404, detail="Item not found")
-    ITEMS[item_id].update(data.model_dump())
-    return ITEMS[item_id]
-
+    obj.name = data.name
+    obj.price = Decimal(str(data.price))
+    db.add(obj)
+    db.flush()
+    db.refresh(obj)
+    return _item_to_out(obj)
 
 @app.patch("/item/{item_id}", response_model=ItemOut)
-def patch_item(item_id: int, data: ItemPatch = Body(...)):
-    item = ITEMS.get(item_id)
-    if not item:
+def patch_item(item_id: int, data: ItemPatch = Body(...), db: Session = Depends(get_db)):
+    obj = db.get(Item, item_id)
+    if not obj:
         raise HTTPException(status_code=404, detail="Item not found")
-    if item["deleted"]:
+    if obj.deleted:
+        # сохраняем поведение твоего варианта
         raise HTTPException(status_code=304, detail="Item deleted")
-
     incoming = data.model_dump(exclude_unset=True)
     if "deleted" in incoming:
         raise HTTPException(status_code=422, detail="Cannot patch deleted field")
-
     allowed = {"name", "price"}
     if not set(incoming).issubset(allowed):
         raise HTTPException(status_code=422, detail="Unexpected fields")
 
-    item.update(incoming)
-    return item
-
+    if "name" in incoming:
+        obj.name = incoming["name"]
+    if "price" in incoming:
+        obj.price = Decimal(str(incoming["price"]))
+    db.add(obj)
+    db.flush()
+    db.refresh(obj)
+    return _item_to_out(obj)
 
 @app.delete("/item/{item_id}", response_model=ItemOut)
-def delete_item(item_id: int):
-    item = ITEMS.get(item_id)
-    if not item:
+def delete_item(item_id: int, db: Session = Depends(get_db)):
+    obj = db.get(Item, item_id)
+    if not obj:
         raise HTTPException(status_code=404, detail="Item not found")
-    item["deleted"] = True
-    return item
+    obj.deleted = True
+    db.add(obj)
+    db.flush()
+    db.refresh(obj)
+    return _item_to_out(obj)
 
+# ---------- Cart endpoints ----------
 
-# ----- Cart endpoints -----
 @app.post("/cart", status_code=status.HTTP_201_CREATED)
-def create_cart(response: Response):
-    cart_id = next_cart_id()
-    CARTS[cart_id] = {"id": cart_id, "items": {}}
-    response.headers["Location"] = f"/cart/{cart_id}"
-    return {"id": cart_id}
-
+def create_cart(response: Response, db: Session = Depends(get_db)):
+    cart = Cart()
+    db.add(cart)
+    db.flush()
+    response.headers["Location"] = f"/cart/{cart.id}"
+    return {"id": cart.id}
 
 @app.get("/cart/{cart_id}", response_model=CartOut)
-def get_cart(cart_id: int):
-    cart = CARTS.get(cart_id)
+def get_cart(cart_id: int, db: Session = Depends(get_db)):
+    cart = db.get(Cart, cart_id)
     if not cart:
         raise HTTPException(status_code=404, detail="Cart not found")
-    return compute_cart(cart)
-
+    # подгрузим элементы
+    db.refresh(cart)
+    return _cart_to_out(db, cart)
 
 @app.get("/cart", response_model=List[CartOut])
 def list_carts(
@@ -116,33 +160,41 @@ def list_carts(
     max_price: Optional[float] = Query(None, ge=0.0),
     min_quantity: Optional[int] = Query(None, ge=0),
     max_quantity: Optional[int] = Query(None, ge=0),
+    db: Session = Depends(get_db),
 ):
-    carts = [compute_cart(c) for c in CARTS.values()]
+    # получаем корзины пачкой
+    carts = db.execute(select(Cart).offset(offset).limit(limit)).scalars().all()
+    outs = [_cart_to_out(db, c) for c in carts]
 
+    # фильтры по цене/quantity в Python (для простоты)
     if min_price is not None:
-        carts = [c for c in carts if c["price"] >= min_price]
+        outs = [c for c in outs if c.price >= min_price]
     if max_price is not None:
-        carts = [c for c in carts if c["price"] <= max_price]
-
+        outs = [c for c in outs if c.price <= max_price]
     if min_quantity is not None:
-        carts = [c for c in carts if sum(i["quantity"] for i in c["items"]) >= min_quantity]
+        outs = [c for c in outs if sum(i.quantity for i in c.items) >= min_quantity]
     if max_quantity is not None:
-        carts = [c for c in carts if sum(i["quantity"] for i in c["items"]) <= max_quantity]
-
-    return carts[offset : offset + limit]
-
+        outs = [c for c in outs if sum(i.quantity for i in c.items) <= max_quantity]
+    return outs
 
 @app.post("/cart/{cart_id}/add/{item_id}", response_model=CartOut)
-def add_to_cart(cart_id: int, item_id: int):
-    cart = CARTS.get(cart_id)
-    item = ITEMS.get(item_id)
+def add_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_db)):
+    cart = db.get(Cart, cart_id)
+    item = db.get(Item, item_id)
     if not cart or not item:
         raise HTTPException(status_code=404, detail="Cart or Item not found")
-    cart["items"][item_id] = cart["items"].get(item_id, 0) + 1
-    return compute_cart(cart)
 
+    ci = db.get(CartItem, {"cart_id": cart_id, "item_id": item_id})
+    if ci:
+        ci.quantity += 1
+    else:
+        ci = CartItem(cart_id=cart_id, item_id=item_id, quantity=1)
+        db.add(ci)
+    db.flush()
+    db.refresh(cart)
+    return _cart_to_out(db, cart)
 
-# ----- WebSocket chat -----
+# ---------- WebSocket chat (как было) ----------
 
 ROOMS: Dict[str, Dict[WebSocket, str]] = {}  # room -> {websocket: username}
 
@@ -158,28 +210,23 @@ async def chat_ws(websocket: WebSocket, chat_name: str):
     room[websocket] = username
 
     try:
-        # опционально: сообщим остальным, что пользователь вошёл
         for ws, user in list(room.items()):
             if ws is not websocket:
                 await ws.send_text(f"* {username} joined *")
 
         while True:
             msg = await websocket.receive_text()
-            # рассылаем всем кроме отправителя
             text = f"{username} :: {msg}"
             for ws, user in list(room.items()):
                 if ws is not websocket:
                     await ws.send_text(text)
 
     except WebSocketDisconnect:
-        # убрать из комнаты
         room.pop(websocket, None)
-        # опционально: сообщить о выходе
         for ws in list(room.keys()):
             try:
                 await ws.send_text(f"* {username} left *")
             except Exception:
                 pass
-        # если комната опустела — удалить
         if not room:
             ROOMS.pop(chat_name, None)
