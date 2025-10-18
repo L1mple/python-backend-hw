@@ -12,31 +12,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: shop_test
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-
     steps:
     - uses: actions/checkout@v4
 
@@ -49,31 +24,27 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r hw2/hw/requiremets.txt
-    - name: Wait for services
-      run: |
-        sleep 2
+        cd hw2/hw
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio requests
 
-    - name: Check installed packages
-      run: |
-        pip list | grep -E "(fastapi|uvicorn|httpx|pytest)"
-
-    - name: Start FastAPI app in background
+    - name: Start all services with docker-compose
       run: |
         cd hw2/hw
-        python -m uvicorn shop_api.main:app --host 0.0.0.0 --port 8080 &
-        echo "FastAPI app starting..."
-        sleep 2
+        docker-compose up -d
+        sleep 30  # Даем время всем сервисам запуститься
 
-    - name: Check app health
-      run: |
-        curl -f http://localhost:8080/health || curl -f http://localhost:8080/ || exit 1
-        echo "✅ FastAPI app is healthy"
 
     - name: Run homework tests
       run: |
         cd hw2/hw
         pytest test_my_test.py -v
+
+    - name: Stop services
+      if: always()
+      run: |
+        cd hw2/hw
+        docker-compose down
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
