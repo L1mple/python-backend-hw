@@ -12,6 +12,51 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: shop
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+      prometheus:
+        image: prom/prometheus
+        ports:
+          - 9090:9090
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      grafana:
+        image: grafana/grafana
+        ports:
+          - 3000:3000
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - uses: actions/checkout@v4
 
@@ -26,27 +71,36 @@ jobs:
         python -m pip install --upgrade pip
         cd hw2/hw
         pip install -r requirements.txt
-        pip install pytest pytest-cov pytest-asyncio requests uvicorn
+        pip install pytest pytest-cov pytest-asyncio requests uvicorn asyncpg redis
+
+    - name: Wait for databases to be ready
+      run: |
+        echo "Waiting for PostgreSQL..."
+        until pg_isready -h localhost -p 5432; do sleep 1; done
+        echo "Waiting for Redis..."
+        until redis-cli -h localhost ping | grep -q PONG; do sleep 1; done
+        echo "✅ All databases are ready"
 
     - name: Start FastAPI app in background
       run: |
         cd hw2/hw
-        python -c "from shop_api.main import app; import uvicorn; uvicorn.run(app, host='0.0.0.0', port=8080)" &
+        python -m uvicorn shop_api.main:app --host 0.0.0.0 --port 8080 &
         echo "FastAPI app starting..."
-        sleep 3
+        sleep 15
 
     - name: Check app health
       run: |
-        curl -f http://localhost:8080/ || exit 1
+        echo "Checking if FastAPI app is healthy..."
+        curl -f http://localhost:8080/ || (echo "❌ FastAPI app not healthy"; exit 1)
         echo "✅ FastAPI app is healthy"
 
     - name: Run homework tests
       run: |
         cd hw2/hw
-        pytest test_my_test.py -v --cov=. --cov-report=term-missing
+        pytest test_my_test.py -v
 
-    - name: Stop services
+    - name: Stop FastAPI app
       if: always()
       run: |
-        # Останавливаем все процессы на порту 8080
+        echo "Stopping FastAPI app..."
         pkill -f "uvicorn" || true
