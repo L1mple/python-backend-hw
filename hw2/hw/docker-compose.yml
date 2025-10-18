@@ -1,7 +1,6 @@
 version: "3"
 
 services:
-
   local:
     build:
       context: .
@@ -9,6 +8,31 @@ services:
     restart: always
     ports:
       - 8080:8080
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/shop
+      - REDIS_URL=redis://redis:6379
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - 5432:5432
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - 6379:6379
+    restart: always
 
   grafana:
     image: grafana/grafana:latest
@@ -29,3 +53,5 @@ services:
       - 9090:9090
     restart: always
 
+volumes:
+  postgres_data:
