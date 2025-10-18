@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 from faker import Faker
 from fastapi.testclient import TestClient
-
+import re
 from shop_api.main import app
 
 client = TestClient(app)
@@ -282,3 +282,28 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+
+def _ok(msg, text):
+    assert re.match(rf"^user-[0-9a-f]{{6}} :: {re.escape(text)}$", msg)
+
+def test_ws_broadcast_two():
+    with client.websocket_connect("/chat/room1") as a, client.websocket_connect("/chat/room1") as b:
+        a.send_text("suuuuup brooo")
+        m = b.receive_text()
+        _ok(m, "suuuuup brooo")
+        b.send_text("yo")
+        m2 = a.receive_text()
+        _ok(m2, "yo")
+
+def test_ws_rooms_isolated_and_names_unique():
+    with client.websocket_connect("/chat/x") as x1, client.websocket_connect("/chat/x") as x2, client.websocket_connect("/chat/y") as y1, client.websocket_connect("/chat/y") as y2:
+        x1.send_text("hi my name is lolik")
+        mx = x2.receive_text()
+        _ok(mx, "hi my name is lolik")
+        y1.send_text("how are you")
+        my = y2.receive_text()
+        _ok(my, "how are you")
+        ux = mx.split(" :: ", 1)[0]
+        uy = my.split(" :: ", 1)[0]
+        assert ux != uy
