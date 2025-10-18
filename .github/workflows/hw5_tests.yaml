@@ -59,8 +59,7 @@ jobs:
 
     - name: Start FastAPI app in background
       run: |
-        сd hw2/hw
-        python -m uvicorn shop_api.main:app --host 0.0.0.0 --port 8080 &
+        python -m uvicorn hw2/hw/shop_api.main:app --host 0.0.0.0 --port 8080 &
         echo "FastAPI app starting..."
         sleep 5
 
