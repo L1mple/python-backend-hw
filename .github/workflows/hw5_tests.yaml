@@ -48,24 +48,23 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        if [ -f "hw2/hw/requirements.txt" ]; then
-          pip install -r hw2/hw/requirements.txt
-        else
-          echo "requirements.txt not found, installing default dependencies"
-        fi
+        pip install -r requirements.txt
         pip install pytest pytest-cov pytest-asyncio asyncpg redis requests
         pip install uvicorn fastapi prometheus-fastapi-instrumentator
     - name: Wait for services
       run: |
-        sleep 10
+        sleep 2
+
+    - name: Check installed packages
+      run: |
+        pip list | grep -E "(fastapi|uvicorn|httpx|pytest)"
 
     - name: Start FastAPI app in background
       run: |
         cd hw2/hw
         python -m uvicorn shop_api.main:app --host 0.0.0.0 --port 8080 &
         echo "FastAPI app starting..."
-        sleep 10
+        sleep 2
 
     - name: Check app health
       run: |
