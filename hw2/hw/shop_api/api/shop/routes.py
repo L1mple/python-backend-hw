@@ -211,12 +211,6 @@ async def get_items_list(
         session, offset, limit, min_price, max_price, show_deleted
     )
 
-    if not entities:
-        raise HTTPException(
-            HTTPStatus.NOT_FOUND,
-            f"Request resource /item/ was not found",
-        )
-
     return [ItemResponse.from_entity(entity) for entity in entities]
 
 
