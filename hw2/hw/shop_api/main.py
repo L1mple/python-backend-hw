@@ -36,6 +36,11 @@ class CartItemModel(Base):
     item_id = Column(Integer, ForeignKey("items.id", ondelete="RESTRICT"), primary_key=True)
     quantity = Column(Integer, nullable=False, default=1)
 
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception:
+    pass
+
 @app.on_event("startup")
 def _create_tables_on_startup() -> None:
     Base.metadata.create_all(bind=engine)
