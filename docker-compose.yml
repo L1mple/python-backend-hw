@@ -3,15 +3,44 @@ version: "3.9"
 services:
   app:
     build: .
-    environment:
-      - PYTHONPATH=/app/hw
+    container_name: shop_api
     ports:
       - "8000:8000"
+    environment:
+      - PYTHONPATH=/app/hw
+      - DATABASE_URL=postgresql+psycopg://shop:shop@db:5432/shopdb
+    depends_on:
+      - db
+    networks:
+      - monitor-net
+
+  db:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      - POSTGRES_DB=shopdb
+      - POSTGRES_USER=shop
+      - POSTGRES_PASSWORD=shop
+    ports:
+      - "5432:5432"    
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - monitor-net
+
+  adminer:
+    image: adminer
+    container_name: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
     networks:
       - monitor-net
 
   prometheus:
     image: prom/prometheus:latest
+    container_name: prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prom-data:/prometheus
@@ -24,6 +53,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    container_name: grafana
     ports:
       - "3000:3000"
     volumes:
@@ -39,6 +69,7 @@ services:
 volumes:
   prom-data:
   grafana-data:
+  pgdata:
 
 networks:
   monitor-net:

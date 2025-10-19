@@ -1,20 +1,25 @@
-from fastapi import APIRouter, HTTPException, Query, Response
+from __future__ import annotations
+
 from typing import List, Optional
+from http import HTTPStatus
+
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from ..models import Item, ItemCreate, ItemPut, ItemPatch
 from ..storage import (
-    next_item_id, save_item, get_item_or_404, get_item_raw, all_items,
+    create_item,
+    save_item,
+    get_item_or_404,
+    get_item_raw,
+    all_items,
 )
 
 router = APIRouter(prefix="/item", tags=["item"])
 
 
-@router.post("", response_model=Item, status_code=201)
-def create_item(body: ItemCreate) -> Item:
-    iid = next_item_id()
-    item = Item(id=iid, name=body.name, price=float(body.price), deleted=False)
-    save_item(item)
-    return item
+@router.post("", response_model=Item, status_code=HTTPStatus.CREATED)
+def post_item(body: ItemCreate) -> Item:
+    return create_item(name=body.name, price=float(body.price))
 
 
 @router.get("/{item_id}", response_model=Item)
@@ -42,9 +47,15 @@ def list_items(
 def replace_item(item_id: int, body: ItemPut) -> Item:
     item = get_item_raw(item_id)
     if not item:
-        raise HTTPException(status_code=404, detail="item not found")
-    new_item = Item(id=item_id, name=body.name, price=float(
-        body.price), deleted=body.deleted)
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND,
+                            detail="item not found")
+
+    new_item = Item(
+        id=item_id,
+        name=body.name,
+        price=float(body.price),
+        deleted=body.deleted,
+    )
     save_item(new_item)
     return new_item
 
@@ -53,22 +64,27 @@ def replace_item(item_id: int, body: ItemPut) -> Item:
 def patch_item(item_id: int, body: ItemPatch):
     item = get_item_raw(item_id)
     if not item:
-        raise HTTPException(status_code=404, detail="item not found")
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND,
+                            detail="item not found")
     if item.deleted:
-        return Response(status_code=304)
+        return Response(status_code=HTTPStatus.NOT_MODIFIED)
+
     if body.name is not None:
         item.name = body.name
     if body.price is not None:
         item.price = float(body.price)
+
     save_item(item)
     return item
 
 
-@router.delete("/{item_id}", status_code=200)
+@router.delete("/{item_id}", status_code=HTTPStatus.OK)
 def delete_item(item_id: int):
     item = get_item_raw(item_id)
     if not item:
-        raise HTTPException(status_code=404, detail="item not found")
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND,
+                            detail="item not found")
+
     item.deleted = True
     save_item(item)
     return None
