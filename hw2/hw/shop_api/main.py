@@ -8,6 +8,9 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from fastapi.params import Query
 from fastapi.responses import JSONResponse
 
+from .db import engine, session_scope
+from .models import Base, Item, Cart, CartItem
+
 app = FastAPI(title="Shop API")
 # Expose Prometheus metrics at `/metrics` and instrument default handlers
 Instrumentator().instrument(app).expose(app)
@@ -18,39 +21,14 @@ def healthz():
     return {"status": "ok"}
 
 
-# In-memory storage
-_item_seq: int = 0
-_cart_seq: int = 0
-ITEMS: Dict[int, dict] = {}
-CARTS: Dict[int, dict] = {}
+Base.metadata.create_all(bind=engine)
 
 
-def _next_item_id() -> int:
-    global _item_seq
-    _item_seq += 1
-    return _item_seq
-
-
-def _next_cart_id() -> int:
-    global _cart_seq
-    _cart_seq += 1
-    return _cart_seq
-
-
-def _recalc_cart(cart: dict) -> None:
+def _recalc_cart_dict(cart: dict) -> None:
     price = 0.0
     for it in cart["items"]:
-        item_id = it["id"]
-        qty = it["quantity"]
-        item = ITEMS.get(item_id)
-        if item is None:
-            # If item missing, skip
-            continue
-        price += float(item["price"]) * qty
-        # availability flag
-    for it in cart["items"]:
-        item = ITEMS.get(it["id"])
-        it["available"] = bool(item is not None and (not item.get("deleted", False)))
+        price += float(it["price"]) * it["quantity"]
+        it["available"] = not it.get("deleted", False)
     cart["price"] = float(price)
 
 
@@ -59,23 +37,25 @@ def _recalc_cart(cart: dict) -> None:
 def create_item(body: dict):
     if not isinstance(body, dict) or "name" not in body or "price" not in body:
         raise HTTPException(status_code=422)
-    item_id = _next_item_id()
-    item = {
-        "id": item_id,
-        "name": body["name"],
-        "price": float(body["price"]),
-        "deleted": False,
-    }
-    ITEMS[item_id] = item
-    return JSONResponse(status_code=201, content=item)
+    with session_scope() as s:
+        obj = Item(name=body["name"], price=float(body["price"]))
+        s.add(obj)
+        s.flush()
+        return JSONResponse(status_code=201, content={
+            "id": obj.id,
+            "name": obj.name,
+            "price": float(obj.price),
+            "deleted": bool(obj.deleted),
+        })
 
 
 @app.get("/item/{item_id}")
 def get_item(item_id: int):
-    item = ITEMS.get(item_id)
-    if item is None or item.get("deleted"):
-        raise HTTPException(status_code=404)
-    return item
+    with session_scope() as s:
+        obj = s.get(Item, item_id)
+        if obj is None or obj.deleted:
+            raise HTTPException(status_code=404)
+        return {"id": obj.id, "name": obj.name, "price": float(obj.price), "deleted": bool(obj.deleted)}
 
 
 @app.get("/item")
@@ -86,80 +66,92 @@ def list_items(
     max_price: Optional[float] = Query(default=None, ge=0.0),
     show_deleted: bool = False,
 ):
-    data = list(ITEMS.values())
-    if not show_deleted:
-        data = [x for x in data if not x.get("deleted", False)]
-    if min_price is not None:
-        data = [x for x in data if float(x["price"]) >= float(min_price)]
-    if max_price is not None:
-        data = [x for x in data if float(x["price"]) <= float(max_price)]
-    return data[offset : offset + limit]
+    from sqlalchemy import select
+    with session_scope() as s:
+        stmt = select(Item)
+        if not show_deleted:
+            stmt = stmt.where(Item.deleted.is_(False))
+        if min_price is not None:
+            from sqlalchemy import cast, Float
+            stmt = stmt.where(Item.price >= float(min_price))
+        if max_price is not None:
+            stmt = stmt.where(Item.price <= float(max_price))
+        rows = s.execute(stmt.offset(offset).limit(limit)).scalars().all()
+        return [{"id": r.id, "name": r.name, "price": float(r.price), "deleted": bool(r.deleted)} for r in rows]
 
 
 @app.put("/item/{item_id}")
 def put_item(item_id: int, body: dict):
     if not isinstance(body, dict) or "name" not in body or "price" not in body:
         raise HTTPException(status_code=422)
-    item = ITEMS.get(item_id)
-    if item is None:
-        raise HTTPException(status_code=404)
-    item = item.copy()
-    item.update({
-        "name": body["name"],
-        "price": float(body["price"]),
-    })
-    ITEMS[item_id] = item
-    # update availability in carts
-    for cart in CARTS.values():
-        _recalc_cart(cart)
-    return item
+    with session_scope() as s:
+        obj = s.get(Item, item_id)
+        if obj is None:
+            raise HTTPException(status_code=404)
+        obj.name = body["name"]
+        obj.price = float(body["price"])
+        s.flush()
+        return {"id": obj.id, "name": obj.name, "price": float(obj.price), "deleted": bool(obj.deleted)}
 
 
 @app.patch("/item/{item_id}")
 def patch_item(item_id: int, body: dict):
-    item = ITEMS.get(item_id)
-    if item is None:
-        raise HTTPException(status_code=404)
-    if item.get("deleted"):
-        return JSONResponse(status_code=304, content=None)
-    if any(k not in {"name", "price"} for k in body.keys()):
-        raise HTTPException(status_code=422)
-    if "name" in body:
-        item["name"] = body["name"]
-    if "price" in body:
-        item["price"] = float(body["price"])
-    for cart in CARTS.values():
-        _recalc_cart(cart)
-    return item
+    with session_scope() as s:
+        obj = s.get(Item, item_id)
+        if obj is None:
+            raise HTTPException(status_code=404)
+        if obj.deleted:
+            return JSONResponse(status_code=304, content=None)
+        if any(k not in {"name", "price"} for k in body.keys()):
+            raise HTTPException(status_code=422)
+        if "name" in body:
+            obj.name = body["name"]
+        if "price" in body:
+            obj.price = float(body["price"])
+        s.flush()
+        return {"id": obj.id, "name": obj.name, "price": float(obj.price), "deleted": bool(obj.deleted)}
 
 
 @app.delete("/item/{item_id}")
 def delete_item(item_id: int):
-    item = ITEMS.get(item_id)
-    if item is not None:
-        item["deleted"] = True
-        for cart in CARTS.values():
-            _recalc_cart(cart)
-    return {"status": "ok"}
+    with session_scope() as s:
+        obj = s.get(Item, item_id)
+        if obj is not None:
+            obj.deleted = True
+            s.flush()
+        return {"status": "ok"}
 
 
 # Cart endpoints
 @app.post("/cart")
 def create_cart():
-    cart_id = _next_cart_id()
-    cart = {"id": cart_id, "items": [], "price": 0.0}
-    CARTS[cart_id] = cart
-    headers = {"location": f"/cart/{cart_id}"}
-    return JSONResponse(status_code=201, content={"id": cart_id}, headers=headers)
+    with session_scope() as s:
+        cart = Cart()
+        s.add(cart)
+        s.flush()
+        headers = {"location": f"/cart/{cart.id}"}
+        return JSONResponse(status_code=201, content={"id": cart.id}, headers=headers)
 
 
 @app.get("/cart/{cart_id}")
 def get_cart(cart_id: int):
-    cart = CARTS.get(cart_id)
-    if cart is None:
-        raise HTTPException(status_code=404)
-    _recalc_cart(cart)
-    return cart
+    with session_scope() as s:
+        cart = s.get(Cart, cart_id)
+        if cart is None:
+            raise HTTPException(status_code=404)
+        items = []
+        price = 0.0
+        for ci in cart.items:
+            items.append({
+                "id": ci.item_id,
+                "name": ci.item.name,
+                "quantity": ci.quantity,
+                "available": not ci.item.deleted,
+                "price": float(ci.item.price),
+                "deleted": bool(ci.item.deleted),
+            })
+            price += float(ci.item.price) * ci.quantity
+        return {"id": cart.id, "items": items, "price": float(price)}
 
 
 @app.get("/cart")
@@ -171,39 +163,52 @@ def list_carts(
     min_quantity: Optional[int] = Query(default=None, ge=0),
     max_quantity: Optional[int] = Query(default=None, ge=0),
 ):
-    data = list(CARTS.values())
-    for cart in data:
-        _recalc_cart(cart)
-    if min_price is not None:
-        data = [c for c in data if float(c["price"]) >= float(min_price)]
-    if max_price is not None:
-        data = [c for c in data if float(c["price"]) <= float(max_price)]
-    if min_quantity is not None:
-        data = [
-            c for c in data if sum(it["quantity"] for it in c["items"]) >= min_quantity
-        ]
-    if max_quantity is not None:
-        data = [
-            c for c in data if sum(it["quantity"] for it in c["items"]) <= max_quantity
-        ]
-    return data[offset : offset + limit]
+    from sqlalchemy import select, func
+    with session_scope() as s:
+        carts = s.execute(select(Cart).offset(offset).limit(limit)).scalars().all()
+        result = []
+        for cart in carts:
+            items = []
+            price = 0.0
+            total_qty = 0
+            for ci in cart.items:
+                items.append({
+                    "id": ci.item_id,
+                    "name": ci.item.name,
+                    "quantity": ci.quantity,
+                    "available": not ci.item.deleted,
+                    "price": float(ci.item.price),
+                    "deleted": bool(ci.item.deleted),
+                })
+                price += float(ci.item.price) * ci.quantity
+                total_qty += ci.quantity
+            data_cart = {"id": cart.id, "items": items, "price": float(price)}
+            if (min_price is not None and price < float(min_price)) or (
+                max_price is not None and price > float(max_price)
+            ) or (
+                min_quantity is not None and total_qty < min_quantity
+            ) or (
+                max_quantity is not None and total_qty > max_quantity
+            ):
+                continue
+            result.append(data_cart)
+        return result
 
 
 @app.post("/cart/{cart_id}/add/{item_id}")
 def add_to_cart(cart_id: int, item_id: int):
-    cart = CARTS.get(cart_id)
-    if cart is None:
-        raise HTTPException(status_code=404)
-    item = ITEMS.get(item_id)
-    if item is None:
-        raise HTTPException(status_code=404)
-    for it in cart["items"]:
-        if it["id"] == item_id:
-            it["quantity"] += 1
-            _recalc_cart(cart)
-            return {"status": "ok"}
-    cart["items"].append(
-        {"id": item_id, "name": item["name"], "quantity": 1, "available": not item.get("deleted", False)}
-    )
-    _recalc_cart(cart)
-    return {"status": "ok"}
+    with session_scope() as s:
+        cart = s.get(Cart, cart_id)
+        if cart is None:
+            raise HTTPException(status_code=404)
+        item = s.get(Item, item_id)
+        if item is None:
+            raise HTTPException(status_code=404)
+        # find existing
+        existing = next((ci for ci in cart.items if ci.item_id == item_id), None)
+        if existing:
+            existing.quantity += 1
+        else:
+            cart.items.append(CartItem(item_id=item_id, quantity=1))
+        s.flush()
+        return {"status": "ok"}

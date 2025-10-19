@@ -12,12 +12,17 @@ services:
       - "8000:8000"
     networks:
       - monitoring
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://shop:shop@db:5432/shop
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8000/healthz', timeout=2); sys.exit(0)"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    depends_on:
+      db:
+        condition: service_started
 
   prometheus:
     image: prom/prometheus:latest
@@ -68,6 +73,24 @@ services:
     networks:
       - monitoring
 
+  db:
+    image: postgres:15-alpine
+    container_name: shop_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=shop
+      - POSTGRES_USER=shop
+      - POSTGRES_PASSWORD=shop
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - monitoring
+
 networks:
   monitoring:
     driver: bridge
+
+volumes:
+  db_data:

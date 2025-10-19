@@ -6,6 +6,9 @@ Prerequisites
 Run
 - From repo root: `cd hw2`
 - Build and start: `docker compose up -d --build`
+- DB connection: `postgresql://shop:shop@localhost:5432/shop`
+- The app reads `DATABASE_URL` (set in compose) and uses SQLAlchemy models instead of in-memory storage.
+- To run transaction demos locally: `python -m hw.tx_demos` (ensure DB is up and `DATABASE_URL` points to it).
 - App: http://localhost:8000/docs
 - Metrics: http://localhost:8000/metrics
 - Prometheus: http://localhost:9090 (scrapes app + cAdvisor)
