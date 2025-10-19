@@ -54,13 +54,10 @@ class CartOut(BaseModel):
     def cart_to_out(cart: store.Cart) -> "CartOut":
         items_out = []
         for ci in cart.items:
-            item = store.ITEMS.get(ci.id)
-            if item is None:
-                continue
             items_out.append({
                 "id": ci.id,
                 "name": ci.name,
                 "quantity": ci.quantity,
-                "available": not item.deleted,
+                "available": ci.available,
             })
         return CartOut(id=cart.id, items=items_out, price=cart.price)

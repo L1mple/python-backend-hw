@@ -82,7 +82,7 @@ def post_add_to_cart(cart_id: int, item_id: int) -> CartOut:
             status_code=HTTPStatus.NOT_FOUND,
             detail=f"Requested /cart/{cart_id} wasn't found"
         )
-    item = store.ITEMS.get(item_id)
+    item = store.get_item(item_id)
     if item is None:
         raise HTTPException(
             status_code=HTTPStatus.NOT_FOUND,
@@ -95,7 +95,8 @@ def post_add_to_cart(cart_id: int, item_id: int) -> CartOut:
 @app.post("/item", status_code=HTTPStatus.CREATED)
 def post_item(body: ItemCreate) -> ItemOut:
     item_id = store.post_item(name=body.name, price=body.price)
-    return ItemOut.item_to_out(store.ITEMS[item_id])
+    item = store.get_item(item_id)
+    return ItemOut.item_to_out(item)
 
 
 @app.get(
@@ -144,8 +145,8 @@ def patch_item(item_id: int, body: ItemPatch):
     item = store.patch_item(item_id=item_id, name=body.name, price=body.price)
     if item is None:
         # tests expect NOT_MODIFIED for deleted only
-        orig = store.ITEMS.get(item_id)
-        if orig is not None and orig.deleted:
+        orig = store.get_item_including_deleted(item_id)
+        if orig is not None and orig.deleted is True:
             return Response(status_code=HTTPStatus.NOT_MODIFIED)
         raise HTTPException(status_code=HTTPStatus.UNPROCESSABLE_ENTITY)
     return ItemOut.item_to_out(item)
