@@ -9,7 +9,10 @@ from fastapi import (
 )
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from hw import store
+try:
+    from hw import store  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+    import store  # type: ignore
 from .contracts import (
     ItemCreate,
     ItemPut,
