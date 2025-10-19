@@ -7,6 +7,7 @@ from faker import Faker
 from fastapi.testclient import TestClient
 
 from shop_api.main import app
+from store.models import Cart, CartItem, Item, CartMapper, CartItemMapper, ItemMapper
 
 client = TestClient(app)
 faker = Faker()
@@ -122,6 +123,7 @@ def test_get_cart(request, cart: int, not_empty: bool) -> None:
         ({"max_price": 20.0}, HTTPStatus.OK),
         ({"min_quantity": 1}, HTTPStatus.OK),
         ({"max_quantity": 0}, HTTPStatus.OK),
+        ({"show_deleted": False}, HTTPStatus.OK),
         ({"offset": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
         ({"limit": 0}, HTTPStatus.UNPROCESSABLE_ENTITY),
         ({"limit": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
@@ -210,6 +212,22 @@ def test_get_item_list(query: dict[str, Any], status_code: int) -> None:
             assert all(item["deleted"] is False for item in data)
 
 
+def test_get_cart_not_found() -> None:
+    response = client.get("/cart/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_to_cart_cart_not_found(existing_item: dict[str, Any]) -> None:
+    item_id = existing_item["id"]
+    response = client.post(f"/cart/999999/add/{item_id}")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_to_cart_item_not_found(existing_empty_cart_id: int) -> None:
+    response = client.post(f"/cart/{existing_empty_cart_id}/add/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
 @pytest.mark.parametrize(
     ("body", "status_code"),
     [
@@ -232,6 +250,17 @@ def test_put_item(
         new_item = existing_item.copy()
         new_item.update(body)
         assert response.json() == new_item
+
+
+@pytest.mark.parametrize(
+    ("item_id", "status_code"),
+    [
+        (999999, HTTPStatus.UNPROCESSABLE_ENTITY),  # non-existent
+    ],
+)
+def test_put_item_invalid(item_id: int, status_code: int) -> None:
+    response = client.put(f"/item/{item_id}", json={"name": "x", "price": 1.0})
+    assert response.status_code == status_code
 
 
 @pytest.mark.parametrize(
@@ -271,6 +300,11 @@ def test_patch_item(request, item: str, body: dict[str, Any], status_code: int) 
         assert patched_item == patch_response_body
 
 
+def test_patch_item_nonexistent() -> None:
+    response = client.patch("/item/999999", json={})
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
 def test_delete_item(existing_item: dict[str, Any]) -> None:
     item_id = existing_item["id"]
 
@@ -282,3 +316,37 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+
+def test_delete_nonexistent_item() -> None:
+    response = client.delete("/item/999999")
+    assert response.status_code == HTTPStatus.OK
+
+
+def test_mappers_cover_none_and_to_orm_paths() -> None:
+    # CartMapper.to_domain(None)
+    assert CartMapper.to_domain(None) is None
+
+    # CartItemMapper.to_orm with None
+    domain_ci = CartItem(id=1, name="n", quantity=2, available=True)
+    orm_ci = CartItemMapper.to_orm(domain_ci, None)
+    assert orm_ci.item_id == 1 and orm_ci.name == "n" and orm_ci.quantity == 2 and orm_ci.available is True
+
+    # ItemMapper.to_orm with None
+    domain_item = Item(id=5, name="p", price=3.14, deleted=False)
+    orm_item = ItemMapper.to_orm(domain_item, None)
+    assert orm_item.id == 5 and orm_item.name == "p" and orm_item.price == 3.14 and orm_item.deleted is False
+
+    # CartMapper.to_orm with None and nested items
+    domain_cart = Cart(id=10, price=0.0, items=[
+        CartItem(id=5, name="p", quantity=1, available=True),
+        CartItem(id=6, name="q", quantity=3, available=False),
+    ])
+    orm_cart = CartMapper.to_orm(domain_cart, None)
+    assert orm_cart.id == 10 and orm_cart.price == 0.0
+    assert len(orm_cart.items) == 2
+    assert {i.item_id for i in orm_cart.items} == {5, 6}
+
+def test_queries_get_item_including_deleted_none_path() -> None:
+    from store.queries import get_item_including_deleted
+    assert get_item_including_deleted(999999) is None
