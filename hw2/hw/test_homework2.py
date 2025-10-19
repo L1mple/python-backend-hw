@@ -7,7 +7,14 @@ from faker import Faker
 from fastapi.testclient import TestClient
 
 from shop_api.main import app
-from store.models import Cart, CartItem, Item, CartMapper, CartItemMapper, ItemMapper
+from store.models import (
+    Cart,
+    CartItem,
+    Item,
+    CartMapper,
+    CartItemMapper,
+    ItemMapper,
+)
 
 client = TestClient(app)
 faker = Faker()
