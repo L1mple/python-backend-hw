@@ -1,6 +1,26 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:15
+    container_name: shop-postgres
+    environment:
+      POSTGRES_DB: shop_db
+      POSTGRES_USER: shop_user
+      POSTGRES_PASSWORD: shop_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop_user"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - monitoring
+
   shop-api:
     build:
       context: .
@@ -10,6 +30,11 @@ services:
     restart: always
     ports:
       - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://shop_user:shop_password@postgres:5432/shop_db
     networks:
       - monitoring
 
@@ -48,4 +73,5 @@ networks:
 
 volumes:
   prometheus-data:
+  postgres_data:
 
