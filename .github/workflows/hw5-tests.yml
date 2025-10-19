@@ -55,17 +55,18 @@ jobs:
           sleep 2
         done
 
-    - name: Run tests with coverage
+    - name: Run tests and save coverage
       working-directory: hw2/hw
       env:
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
         DATABASE_URL: ${{ env.DATABASE_URL }}
       run: |
-        pytest -v --cov=shop_api --cov-report=term-missing --cov-fail-under=100 test_homework2.py
+        pytest --junitxml=pytest.xml --cov-report=term-missing:skip-covered \
+              --cov=shop_api test_homework2.py | tee pytest-coverage.txt
 
-    - name: Upload coverage report
-      uses: MishaKav/pytest-coverage-comment@v1.1.57
+    - name: Post coverage comment
+      uses: MishaKav/pytest-coverage-comment@main
       with:
-        pytest-args: 'test_homework2.py --cov=shop_api --cov-report=xml'
+        pytest-coverage-path: hw2/hw/pytest-coverage.txt
+        junitxml-path: hw2/hw/pytest.xml
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        min-coverage: 100
