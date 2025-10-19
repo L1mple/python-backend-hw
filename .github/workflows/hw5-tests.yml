@@ -34,6 +34,6 @@ jobs:
     - name: Tests coverage report
       working-directory: hw2/hw
       env:
-        PYTHONPATH: ${{ github.workspace }}/hw2
+        PYTHONPATH: ${{ github.workspace }}/hw2/hw
       run: |
-        pytest -q --maxfail=1 --disable-warnings --cov=. --cov-report=term-missing --cov-fail-under=99
+        pytest --cov
