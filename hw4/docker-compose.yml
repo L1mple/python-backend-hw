@@ -12,6 +12,20 @@ services:
     volumes:
       - ./shop_api:/app/src/shop_api  # монтируем код внутрь контейнера
     command: ["uvicorn", "shop_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    depends_on:
+      - postgres  # Зависимость от БД
+
+  postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: shop_db
+    ports:
+      - 5432:5432  # для доступа извне, если нужно
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # сохранение данных БД
 
   grafana:
     image: grafana/grafana:latest
@@ -38,3 +52,4 @@ services:
 volumes:
   grafana_:
   prometheus_:
+  postgres_data:

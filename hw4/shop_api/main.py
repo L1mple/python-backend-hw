@@ -4,61 +4,42 @@ from http import HTTPStatus
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from sqlalchemy import select, update
+from sqlalchemy.exc import NoResultFound
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from shop_api.models import (CartItem, CartResponse, ItemCreate, ItemPatch,
-                             ItemResponse, ItemUpdate)
+from shop_api.models import (Base, Cart, CartItem, CartResponse, Item, ItemCreate, ItemPatch,
+                             ItemResponse, ItemUpdate, CartItemResponse)
 
+# Основное приложение FastAPI
 app = FastAPI(title="Shop API")
+
+# Интеграция с Prometheus для мониторинга метрик
 Instrumentator().instrument(app).expose(app)
 
-# Хранение данных в памяти: словари для быстрого поиска по ID
-carts: Dict[int, Dict[str, Any]] = (
-    {}
-)  # {cart_id: {"id": int, "items": [{"id": int, "quantity": int}]}}
-items: Dict[int, Dict[str, Any]] = (
-    {}
-)  # {item_id: {"id": int, "name": str, "price": float, "deleted": bool}}
-cart_id_counter: int = 0  # Счётчик для уникальных ID корзин
-item_id_counter: int = 0  # Счётчик для уникальных ID товаров
+# настройки подключения к postgresql
+DATABASE_URL = "postgresql+asyncpg://user:password@postgres:5432/shop_db"
+engine = create_async_engine(DATABASE_URL, echo=True)  # echo=True для логирования SQL-запросов
+async_session = async_sessionmaker(engine, expire_on_commit=False)
 
+# Dependency для получения асинхронной сессии БД
+async def get_db() -> AsyncSession:
+    async with async_session() as session:
+        yield session
 
-# Вспомогательные функции
-def get_next_cart_id() -> int:
-    """Генерация уникального ID для корзины"""
-    global cart_id_counter
-    cart_id_counter += 1
-    return cart_id_counter
+# Событие запуска: создание таблиц в БД, если они не существуют
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-
-def get_next_item_id() -> int:
-    """Генерация уникального ID для товара"""
-    global item_id_counter
-    item_id_counter += 1
-    return item_id_counter
-
-
-def calculate_cart_price(cart: Dict[str, Any]) -> float:
-    """
-    Расчёт общей цены корзины:
-    Сумма (price * quantity) только для доступных товаров (не удалённых)
-    """
-    price = 0.0
-    for cart_item in cart.get("items", []):
-        item_id = cart_item["id"]
-        if item_id in items and not items[item_id]["deleted"]:
-            price += items[item_id]["price"] * cart_item["quantity"]
-    return price
-
-
+# Вспомогательная функция для имитации случайной ошибки (для тестирования)
 def maybe_raise_random_error():
     if random.random() < 0.1:  # 10% шанс ошибки
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="Random error occurred"
-        )
-
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="Random error occurred")
 
 @app.get("/test-error")
 async def test_error():
@@ -71,44 +52,54 @@ async def test_error():
 async def root():
     return {"message": "Welcome to Shop API! Go to /docs for documentation."}
 
+# --- Эндпоинты для корзин (Cart) ---
 
-# Эндпоинты для корзин (Cart)
 @app.post("/cart", status_code=HTTPStatus.CREATED, response_model=Dict[str, int])
-async def create_cart() -> JSONResponse:
+async def create_cart(db: AsyncSession = Depends(get_db)) -> JSONResponse:
     """Создание новой пустой корзины, возвращает ID"""
-    cart_id = get_next_cart_id()
-    carts[cart_id] = {"id": cart_id, "items": []}
+    cart = Cart()
+    db.add(cart)
+    await db.commit()
+    await db.refresh(cart)
     return JSONResponse(
-        content={"id": cart_id},
+        content={"id": cart.id},
         status_code=HTTPStatus.CREATED,
-        headers={"location": f"/cart/{cart_id}"},
+        headers={"location": f"/cart/{cart.id}"},
     )
 
 
 @app.get("/cart/{id}", response_model=CartResponse)
-async def get_cart_by_id(id: int) -> Dict[str, Any]:
-    """Получение корзины по ID"""
-    if id not in carts:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="Корзина не найдена"
-        )
-
-    cart = carts[id]
-    cart_items = []
-    for cart_item in cart["items"]:
-        item_id = cart_item["id"]
-        if item_id in items:
-            cart_items.append(
-                {
-                    "id": item_id,
-                    "name": items[item_id]["name"],
-                    "quantity": cart_item["quantity"],
-                    "available": not items[item_id]["deleted"],
-                }
-            )
-
-    return {"id": cart["id"], "items": cart_items, "price": calculate_cart_price(cart)}
-
+async def get_cart_by_id(id: int, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
+    """Получение корзины по ID с расчётом цены и доступности товаров"""
+    try:
+        cart = await db.get(Cart, id)
+        if not cart:
+            raise NoResultFound
+        items = []
+        price = 0.0
+        for cart_item in cart.items:
+            if not cart_item.item.deleted:
+                items.append(
+                    CartItemResponse(
+                        id=cart_item.item_id,
+                        name=cart_item.item.name,
+                        quantity=cart_item.quantity,
+                        available=True,
+                    )
+                )
+                price += cart_item.item.price * cart_item.quantity
+            else:
+                items.append(
+                    CartItemResponse(
+                        id=cart_item.item_id,
+                        name=cart_item.item.name,
+                        quantity=cart_item.quantity,
+                        available=False,
+                    )
+                )
+        return CartResponse(id=cart.id, items=items, price=price)
+    except NoResultFound:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Корзина не найдена")
 
 @app.get("/cart", response_model=List[CartResponse])
 async def list_carts(
@@ -118,88 +109,80 @@ async def list_carts(
     max_price: Optional[float] = None,
     min_quantity: Optional[int] = None,
     max_quantity: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
 ) -> List[Dict[str, Any]]:
     """
     Список корзин с фильтрами и пагинацией.
-    Валидация: offset >= 0, limit > 0, цены/кол-ва >= 0
+    Фильтрация по цене и количеству товаров в корзине.
     """
+    # Валидация параметров
     if offset < 0 or limit <= 0:
-        raise HTTPException(
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-            detail="Неверный offset или limit",
-        )
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "Неверный offset или limit")
     if min_price is not None and min_price < 0:
-        raise HTTPException(
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail="Неверный min_price"
-        )
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "Неверный min_price")
     if max_price is not None and max_price < 0:
-        raise HTTPException(
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail="Неверный max_price"
-        )
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "Неверный max_price")
     if min_quantity is not None and min_quantity < 0:
-        raise HTTPException(
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail="Неверный min_quantity"
-        )
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "Неверный min_quantity")
     if max_quantity is not None and max_quantity < 0:
-        raise HTTPException(
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail="Неверный max_quantity"
-        )
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "Неверный max_quantity")
 
-    result = []
-    for cart_id in sorted(carts.keys()):
-        cart_response = await get_cart_by_id(cart_id)
-        total_quantity = sum(item["quantity"] for item in cart_response["items"])
-        cart_price = cart_response["price"]
-
-        if min_price is not None and cart_price < min_price:
+    # Получение всех корзин и фильтрация в памяти (для простоты)
+    stmt = select(Cart)
+    result = await db.execute(stmt)
+    carts_list = result.scalars().all()
+    filtered = []
+    for cart in carts_list:
+        cart_response = await get_cart_by_id(cart.id, db)  # Используем функцию для получения полной корзины
+        total_quantity = sum(item.quantity for item in cart_response.items)
+        if (min_price is not None and cart_response.price < min_price) or \
+           (max_price is not None and cart_response.price > max_price) or \
+           (min_quantity is not None and total_quantity < min_quantity) or \
+           (max_quantity is not None and total_quantity > max_quantity):
             continue
-        if max_price is not None and cart_price > max_price:
-            continue
-        if min_quantity is not None and total_quantity < min_quantity:
-            continue
-        if max_quantity is not None and total_quantity > max_quantity:
-            continue
-
-        result.append(cart_response)
-
-    return result[offset : offset + limit]
-
+        filtered.append(cart_response)
+    return filtered[offset:offset + limit]
 
 @app.post("/cart/{cart_id}/add/{item_id}")
-async def add_item_to_cart(cart_id: int, item_id: int) -> None:
+async def add_item_to_cart(cart_id: int, item_id: int, db: AsyncSession = Depends(get_db)) -> None:
     """Добавление товара в корзину: инкремент, если есть; добавление, если нет"""
-    if cart_id not in carts:
-        raise HTTPException(
-            status_code=HTTPStatus.NOT_FOUND, detail="Корзина не найдена"
-        )
-    if item_id not in items:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Товар не найден")
+    cart = await db.get(Cart, cart_id)
+    if not cart:
+        raise HTTPException(HTTPStatus.NOT_FOUND, "Корзина не найдена")
+    item = await db.get(Item, item_id)
+    if not item:
+        raise HTTPException(HTTPStatus.NOT_FOUND, "Товар не найден")
 
-    cart = carts[cart_id]
-    for cart_item in cart["items"]:
-        if cart_item["id"] == item_id:
-            cart_item["quantity"] += 1
-            return
-    cart["items"].append({"id": item_id, "quantity": 1})
+    # проверка наличия товара в корзине
+    existing = await db.execute(
+        select(CartItem).where(CartItem.cart_id == cart_id, CartItem.item_id == item_id)
+    )
+    cart_item = existing.scalar_one_or_none()
+    if cart_item:
+        cart_item.quantity += 1
+    else:
+        cart_item = CartItem(cart_id=cart_id, item_id=item_id, quantity=1)
+        db.add(cart_item)
+    await db.commit()
 
+# --- Эндпоинты для товаров (Item) ---
 
-# Эндпоинты для товаров (Item)
 @app.post("/item", response_model=ItemResponse, status_code=HTTPStatus.CREATED)
-async def create_item(item: ItemCreate) -> Dict[str, Any]:
+async def create_item(item_data: ItemCreate, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """Создание нового товара"""
-    item_id = get_next_item_id()
-    new_item = {"id": item_id, "name": item.name, "price": item.price, "deleted": False}
-    items[item_id] = new_item
-    return new_item
-
+    item = Item(name=item_data.name, price=item_data.price)
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return ItemResponse(id=item.id, name=item.name, price=item.price, deleted=item.deleted)
 
 @app.get("/item/{id}", response_model=ItemResponse)
-async def get_item_by_id(id: int) -> Dict[str, Any]:
-    """Получение товара по ID (404, если удалён)"""
-    if id not in items or items[id]["deleted"]:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Товар не найден")
-    return items[id]
-
+async def get_item_by_id(id: int, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
+    """получение товара по id (404, если удалён)"""
+    item = await db.get(Item, id)
+    if not item or item.deleted:
+        raise HTTPException(HTTPStatus.NOT_FOUND, "Товар не найден")
+    return ItemResponse(id=item.id, name=item.name, price=item.price, deleted=item.deleted)
 
 @app.get("/item", response_model=List[ItemResponse])
 async def list_items(
@@ -208,84 +191,74 @@ async def list_items(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     show_deleted: bool = False,
+    db: AsyncSession = Depends(get_db),
 ) -> List[Dict[str, Any]]:
     """
     Список товаров с фильтрами и пагинацией.
     По умолчанию не показывает удалённые.
     """
+    # Валидация параметров
     if offset < 0 or limit <= 0:
-        raise HTTPException(
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
-            detail="Неверный offset или limit",
-        )
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "Неверный offset или limit")
     if min_price is not None and min_price < 0:
-        raise HTTPException(
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail="Неверный min_price"
-        )
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "Неверный min_price")
     if max_price is not None and max_price < 0:
-        raise HTTPException(
-            status_code=HTTPStatus.UNPROCESSABLE_ENTITY, detail="Неверный max_price"
-        )
+        raise HTTPException(HTTPStatus.UNPROCESSABLE_ENTITY, "Неверный max_price")
 
-    result = []
-    for item_id in sorted(items.keys()):
-        item = items[item_id]
-        if not show_deleted and item["deleted"]:
-            continue
-        if min_price is not None and item["price"] < min_price:
-            continue
-        if max_price is not None and item["price"] > max_price:
-            continue
-        result.append(item)
-
-    return result[offset : offset + limit]
-
+    # Построение SQL-запроса с фильтрами
+    stmt = select(Item)
+    if not show_deleted:
+        stmt = stmt.where(Item.deleted == False)
+    if min_price is not None:
+        stmt = stmt.where(Item.price >= min_price)
+    if max_price is not None:
+        stmt = stmt.where(Item.price <= max_price)
+    stmt = stmt.offset(offset).limit(limit).order_by(Item.id)
+    result = await db.execute(stmt)
+    items_list = result.scalars().all()
+    return [ItemResponse(id=i.id, name=i.name, price=i.price, deleted=i.deleted) for i in items_list]
 
 @app.put("/item/{id}", response_model=ItemResponse)
-async def update_item(id: int, item: ItemUpdate) -> Dict[str, Any]:
+async def update_item(id: int, item_data: ItemUpdate, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """Полная замена товара (304, если удалён)"""
-    if id not in items:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Товар не найден")
-    if items[id]["deleted"]:
-        raise HTTPException(status_code=HTTPStatus.NOT_MODIFIED, detail="Товар удалён")
-
-    updated_item = {
-        "id": id,
-        "name": item.name,
-        "price": item.price,
-        "deleted": items[id]["deleted"],
-    }
-    items[id] = updated_item
-    return updated_item
-
+    item = await db.get(Item, id)
+    if not item:
+        raise HTTPException(HTTPStatus.NOT_FOUND, "Товар не найден")
+    if item.deleted:
+        raise HTTPException(HTTPStatus.NOT_MODIFIED, "Товар удалён")
+    item.name = item_data.name
+    item.price = item_data.price
+    await db.commit()
+    await db.refresh(item)
+    return ItemResponse(id=item.id, name=item.name, price=item.price, deleted=item.deleted)
 
 @app.patch("/item/{id}", response_model=ItemResponse)
-async def patch_item(id: int, patch_data: ItemPatch) -> Dict[str, Any]:
+async def patch_item(id: int, patch_data: ItemPatch, db: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
     """
     Частичное обновление (не трогает deleted).
-    422 на попытку изменить deleted или лишние поля.
+    422 на попытку изменить deleted или лишние поля (обеспечивается Pydantic).
     """
-    if id not in items:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Товар не найден")
-    if items[id]["deleted"]:
-        raise HTTPException(status_code=HTTPStatus.NOT_MODIFIED, detail="Товар удалён")
-
-    updated_item = items[id].copy()
+    item = await db.get(Item, id)
+    if not item:
+        raise HTTPException(HTTPStatus.NOT_FOUND, "Товар не найден")
+    if item.deleted:
+        raise HTTPException(HTTPStatus.NOT_MODIFIED, "Товар удалён")
     if patch_data.name is not None:
-        updated_item["name"] = patch_data.name
+        item.name = patch_data.name
     if patch_data.price is not None:
-        updated_item["price"] = patch_data.price
-
-    items[id] = updated_item
-    return updated_item
-
+        item.price = patch_data.price
+    await db.commit()
+    await db.refresh(item)
+    return ItemResponse(id=item.id, name=item.name, price=item.price, deleted=item.deleted)
 
 @app.delete("/item/{id}", status_code=HTTPStatus.OK)
-async def delete_item(id: int) -> None:
+async def delete_item(id: int, db: AsyncSession = Depends(get_db)) -> None:
     """Soft-delete: помечает как удалённый (идемпотентно)"""
-    if id not in items:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Товар не найден")
-    items[id]["deleted"] = True
+    item = await db.get(Item, id)
+    if not item:
+        raise HTTPException(HTTPStatus.NOT_FOUND, "Товар не найден")
+    item.deleted = True
+    await db.commit()
 
 
 # WebSocket чат
@@ -302,7 +275,7 @@ class Broadcaster:
         """Подписка клиента, присвоение имени"""
         await ws.accept()
         self.subscribers.append(ws)
-        username = f"User{random.randint(1, 1000)}"  # Случайное имя типа User42
+        username = f"User_{uuid4().hex[:5]}"  # случайное имя типа User_a1b2
         self.usernames[ws] = username
         return username
 
@@ -334,7 +307,7 @@ class Broadcaster:
 # Хранение комнат для чата (stateful, в памяти)
 chat_rooms: Dict[str, Broadcaster] = {}  # {chat_name: Broadcaster}
 
-
+# WebSocket эндпоинт для чата
 @app.websocket("/chat/{chat_name}")
 async def ws_chat(ws: WebSocket, chat_name: str):
     """Подключение к чату в комнате {chat_name}"""

@@ -14,3 +14,7 @@ websockets==15.0.1
 
 # Для мониторинга
 prometheus-fastapi-instrumentator>=5.9.0
+
+# Для БД
+sqlalchemy>=2.0.0
+asyncpg>=0.29.0  # асинхронный драйвер для PostgreSQL
