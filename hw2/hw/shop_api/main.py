@@ -3,12 +3,15 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response, JSONResponse
+from prometheus_client import Counter
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import NonNegativeInt, PositiveInt, NonNegativeFloat, BaseModel
 
 from shop_api.models import CartItem, Cart, Item
 from shop_api.repository import CartNotFoundException, CartsRepository, ItemNotFoundException, ItemsRepository
 
 app = FastAPI(title="Shop API")
+instrumentator = Instrumentator().instrument(app).expose(app)
 
 
 @app.post("/cart")
@@ -21,8 +24,12 @@ async def create_cart():
     )
 
 
+test_get_cart_counter = Counter('get_cart_counter', 'Test custum counter')
+
+
 @app.get("/cart/{id}")
 async def get_cart(id: NonNegativeInt):
+    test_get_cart_counter.inc()
     try:
         cart = CartsRepository.get_cart(id)
     except CartNotFoundException:
