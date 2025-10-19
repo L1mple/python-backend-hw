@@ -39,9 +39,24 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
     networks:
       - monitoring
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=myshop
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - monitoring
 volumes:
   prometheus_data:
   grafana_data:
+  postgres_data:
 
 networks:
   monitoring:

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from hw2.rest_example.api.pokemon import router
+from rest_example.api.pokemon import router
 
 app = FastAPI(title="Pokemon REST API Example")
 
