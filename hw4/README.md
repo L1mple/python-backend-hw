@@ -2,10 +2,6 @@
 
 Простой API магазина на **FastAPI** с хранением данных в **PostgreSQL** (через SQLAlchemy), WebSocket-чатом и скриптами для демонстрации проблем транзакций (dirty read, non-repeatable read, phantom read).
 
-## Скриншот
-
-![Пример работы API](images/api_screenshot.png)  
-*Описание скриншота (добавьте изображение и замените этот текст)*
 
 ## Описание
 
