@@ -1,12 +1,33 @@
-version: '3.8'
-
 services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: shop
+      MYSQL_USER: shop
+      MYSQL_PASSWORD: shop
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - monitoring
+
   shop-api:
     build: .
     ports:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=mysql+pymysql://shop:shop@db:3306/shop
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -56,3 +77,4 @@ networks:
 volumes:
   prometheus_data:
   grafana_data:
+  mysql_data:

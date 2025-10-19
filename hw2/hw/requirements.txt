@@ -2,6 +2,8 @@
 fastapi>=0.117.1
 uvicorn>=0.24.0
 prometheus-client>=0.19.0
+SQLAlchemy>=2.0.32
+PyMySQL>=1.1.1
 
 # Зависимости для тестирования
 pytest>=7.4.0
