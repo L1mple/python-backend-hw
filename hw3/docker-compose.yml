@@ -1,0 +1,40 @@
+version: "3"
+
+services:
+  local:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: local
+    restart: always
+    ports:
+      - 8000:8000  # порт fastAPI (хост:контейнер)
+    volumes:
+      - ./shop_api:/app/src/shop_api  # монтируем код внутрь контейнера
+    command: ["uvicorn", "shop_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 3000:3000  # порт Grafana (хост:контейнер)
+    restart: always
+    volumes:
+      - grafana_:/var/lib/grafana  # сохранение данных grafana
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./settings/prometheus/:/etc/prometheus/  # монтируем конфигурацию
+      - prometheus_:/prometheus  # сохранение метрик
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - 9090:9090  # порт prometheus (хост:контейнер)
+    restart: always
+
+volumes:
+  grafana_:
+  prometheus_:

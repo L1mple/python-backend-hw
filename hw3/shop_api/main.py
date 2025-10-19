@@ -1,3 +1,4 @@
+import random
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from typing import Any, Dict, List, Optional
@@ -5,11 +6,13 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from shop_api.models import (CartItem, CartResponse, ItemCreate, ItemPatch,
                              ItemResponse, ItemUpdate)
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 # Хранение данных в памяти: словари для быстрого поиска по ID
 carts: Dict[int, Dict[str, Any]] = (
@@ -48,6 +51,25 @@ def calculate_cart_price(cart: Dict[str, Any]) -> float:
         if item_id in items and not items[item_id]["deleted"]:
             price += items[item_id]["price"] * cart_item["quantity"]
     return price
+
+
+def maybe_raise_random_error():
+    if random.random() < 0.1:  # 10% шанс ошибки
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR, detail="Random error occurred"
+        )
+
+
+@app.get("/test-error")
+async def test_error():
+    """Эндпоинт для имитации случайной ошибки"""
+    maybe_raise_random_error()
+    return {"message": "No error this time"}
+
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to Shop API! Go to /docs for documentation."}
 
 
 # Эндпоинты для корзин (Cart)
@@ -280,7 +302,7 @@ class Broadcaster:
         """Подписка клиента, присвоение имени"""
         await ws.accept()
         self.subscribers.append(ws)
-        username = f"User_{uuid4().hex[:4]}"  # случайное имя типа User_a1b2
+        username = f"User{random.randint(1, 1000)}"  # Случайное имя типа User42
         self.usernames[ws] = username
         return username
 

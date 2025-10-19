@@ -22,4 +22,6 @@ cd python-backend-hw
 - [Лекции в
   pdf](https://drive.google.com/drive/folders/1ndtvCVTnfOASnQVDya1DpbUnX26hB8CB?usp=sharing)
   (так же будут постепенно подгружаться)
-- [Оценки](https://docs.google.com/spreadsheets/d/1T4wlaI43QolfCQiKgj-HeVzdkQa0_mbJ1qV1RpxgiKg/edit?usp=sharing)
+- [Оценки](https://docs.google.com/spreadsheets/d/1T4wlaI43QolfCQiKgj-HeVzdkQa0_mbJ1qV1RpxgiKg/edit?usp=sharing)  
+
+- [Третье домашнее задание (HW 3)](hw3/README.md)
