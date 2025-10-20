@@ -2,8 +2,8 @@ import pytest
 import sys
 import os
 
-# AJOUTEZ CETTE LIGNE MANQUANTE
-sys.path.append('/app')
+# Solution universelle - ajoute le chemin courant
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from database import Base, get_db
 from main import app
 
-# Utilise SQLite en local, PostgreSQL sur GitHub
+# Configuration base de données
 IS_CI = os.getenv('GITHUB_ACTIONS') == 'true'
 TEST_DATABASE_URL = os.getenv("DATABASE_URL", 
     "postgresql://postgres:password@postgres:5432/test_db" if IS_CI 
@@ -30,7 +30,7 @@ def db_session():
         yield session
     finally:
         session.close()
-        if not IS_CI:  # Ne supprime les tables qu'en local
+        if not IS_CI:
             Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture(scope="function")
