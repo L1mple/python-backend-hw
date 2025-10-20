@@ -34,19 +34,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # 🔎 Étape de diagnostic : afficher l’arborescence complète
-    - name: Afficher le répertoire courant et son contenu
+    # 🔎 Étape de diagnostic améliorée
+    - name: Afficher la structure du projet
       run: |
-        echo "Répertoire racine du dépôt :"
+        echo "=== Structure du projet ==="
         pwd
-        ls -R hw5 || true
-
-    # 🧭 Définir le PYTHONPATH sur le bon dossier
-    - name: Définir le PYTHONPATH
-      run: |
-        echo "Définition du PYTHONPATH..."
-        echo "PYTHONPATH=${{ github.workspace }}/hw5/hw" >> $GITHUB_ENV
-        echo "PYTHONPATH défini sur : ${{ github.workspace }}/hw5/hw"
+        echo "=== Contenu de hw5/hw ==="
+        ls -la hw5/hw/ || echo "hw5/hw/ non trouvé"
+        echo "=== Fichier database.py existe ? ==="
+        ls -la hw5/hw/database.py || echo "database.py non trouvé"
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
@@ -59,21 +55,30 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-test.txt
 
-    # ⚙️ Installation du package local (facultatif, mais utile si setup.py/pyproject.toml existe)
-    - name: Install local package
+    # 🎯 CORRECTION : Définir PYTHONPATH APRÈS l'installation
+    - name: Définir PYTHONPATH
       working-directory: hw5/hw
       run: |
-        pip install -e .
+        echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
+        echo "PYTHONPATH défini sur: $(pwd)"
 
-    # 🧪 Lancement des tests avec couverture
+    # 🧪 Lancement des tests avec diagnostic
     - name: Run tests with coverage
       working-directory: hw5/hw
       env:
         DATABASE_URL: postgresql://postgres:password@postgres:5432/test_db
-        PYTHONPATH: ${{ github.workspace }}/hw5/hw
+        # PYTHONPATH est déjà défini dans l'étape précédente
       run: |
-        echo "Chemins utilisés par Python :"
-        python -c "import sys; print(sys.path)"
+        echo "=== Diagnostic avant tests ==="
+        echo "Répertoire courant: $(pwd)"
+        echo "PYTHONPATH: $PYTHONPATH"
+        echo "Fichiers présents:"
+        ls -la
+        echo "=== Chemins Python ==="
+        python -c "import sys; print('\n'.join(sys.path))"
+        echo "=== Test d'import database ==="
+        python -c "from database import Base; print('✅ Import database réussi')" || echo "❌ Import database échoué"
+        echo "=== Lancement des tests ==="
         pytest --cov=shop_api --cov-report=xml --cov-report=term-missing -v
 
     - name: Upload coverage to Codecov
