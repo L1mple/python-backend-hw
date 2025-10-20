@@ -2,10 +2,10 @@ name: "HW5 Tests"
 
 on:
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
     paths: [ 'hw5/hw/**' ]
   push:
-    branches: [ main, master ]
+    branches: [ main ]
     paths: [ 'hw5/hw/**' ]
 
 jobs:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12"]  # Testons d'abord avec une seule version
+        python-version: ["3.12"]
 
     services:
       postgres:
@@ -34,6 +34,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # 🔎 Étape de diagnostic : afficher l’arborescence complète
+    - name: Afficher le répertoire courant et son contenu
+      run: |
+        echo "Répertoire racine du dépôt :"
+        pwd
+        ls -R hw5 || true
+
+    # 🧭 Définir le PYTHONPATH sur le bon dossier
+    - name: Définir le PYTHONPATH
+      run: |
+        echo "Définition du PYTHONPATH..."
+        echo "PYTHONPATH=${{ github.workspace }}/hw5/hw" >> $GITHUB_ENV
+        echo "PYTHONPATH défini sur : ${{ github.workspace }}/hw5/hw"
+
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
@@ -45,16 +59,21 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-test.txt
 
+    # ⚙️ Installation du package local (facultatif, mais utile si setup.py/pyproject.toml existe)
     - name: Install local package
       working-directory: hw5/hw
       run: |
         pip install -e .
 
+    # 🧪 Lancement des tests avec couverture
     - name: Run tests with coverage
       working-directory: hw5/hw
       env:
         DATABASE_URL: postgresql://postgres:password@postgres:5432/test_db
+        PYTHONPATH: ${{ github.workspace }}/hw5/hw
       run: |
+        echo "Chemins utilisés par Python :"
+        python -c "import sys; print(sys.path)"
         pytest --cov=shop_api --cov-report=xml --cov-report=term-missing -v
 
     - name: Upload coverage to Codecov
