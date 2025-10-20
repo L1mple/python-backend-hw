@@ -36,44 +36,47 @@ jobs:
       with:
         python-version: "3.12"
 
+    - name: Wait for PostgreSQL to be ready
+      run: |
+        echo "Waiting for PostgreSQL to be ready..."
+        for i in {1..30}; do
+          nc -z localhost 5432 && echo "PostgreSQL is ready!" && break
+          echo "Waiting for PostgreSQL... attempt $i"
+          sleep 2
+        done
+
     - name: Install dependencies
       working-directory: hw5/hw
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements-test.txt
 
-    - name: Debug project structure
+    - name: Test database connection
       working-directory: hw5/hw
+      env:
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
       run: |
-        echo "=== Structure du projet ==="
-        pwd
-        ls -la
-        echo "=== Test présence database.py ==="
-        ls -la database.py
-        echo "=== Test import manuel ==="
+        echo "Testing database connection..."
         python -c "
-        import sys
-        sys.path.append('.')
+        import psycopg2
         try:
-            from database import Base
-            print('✅ SUCCÈS: database.py peut être importé')
+            conn = psycopg2.connect('postgresql://postgres:password@localhost:5432/test_db')
+            print('✅ Database connection SUCCESSFUL')
+            conn.close()
         except Exception as e:
-            print(f'❌ ÉCHEC: {e}')
+            print(f'❌ Database connection FAILED: {e}')
         "
 
     - name: Run tests with coverage
       working-directory: hw5/hw
       env:
-        DATABASE_URL: postgresql://postgres:password@postgres:5432/test_db
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
       run: |
         # Forcer l'ajout du chemin courant à Python
         export PYTHONPATH=$PYTHONPATH:$(pwd)
-        echo "PYTHONPATH: $PYTHONPATH"
-        
-        # Test final avant les tests
-        python -c "from database import Base; print('🎉 Import database RÉUSSI!'); from main import app; print('🎉 Import main RÉUSSI!')"
-        
-        # Lancement des tests
+        echo "Testing imports..."
+        python -c "from database import Base; from main import app; print('✅ All imports successful')"
+        echo "Running tests..."
         pytest --cov=shop_api --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
