@@ -22,4 +22,4 @@ jobs:
                   pip install pytest pytest-cov
             - name: Run tests with coverage
               run: |
-                  pytest -q hw2/hw --cov=hw2/hw --cov-report=term --cov-fail-under=95
+                  PYTHONPATH=hw2/hw pytest -q hw2/hw --cov=hw2/hw --cov-report=term --cov-fail-under=95
