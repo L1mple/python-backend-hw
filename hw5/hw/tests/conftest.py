@@ -1,18 +1,27 @@
 import pytest
 import sys
-sys.path.append('/app')
+import os
+
+# Détecte l'environnement
+IS_CI = os.getenv('GITHUB_ACTIONS') == 'true'
+
+if IS_CI:
+    # Chemin pour GitHub Actions
+    sys.path.append('/home/runner/work/python-backend-hw/python-backend-hw/hw5/hw')
+    from shop_api.database import Base, get_db
+    from shop_api.main import app
+    TEST_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@postgres:5432/test_db")
+else:
+    # Chemin pour Docker local
+    sys.path.append('/app')
+    from database import Base, get_db
+    from main import app
+    TEST_DATABASE_URL = "sqlite:///./test.db"
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
-# SOLUTION : Utilise TestClient depuis fastapi, PAS starlette
 from fastapi.testclient import TestClient
 
-from database import Base, get_db
-from main import app
-
-# Base de données de test
-TEST_DATABASE_URL = "sqlite:///./test.db"
 engine = create_engine(TEST_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -24,7 +33,8 @@ def db_session():
         yield session
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine)
+        if not IS_CI:  # Ne drop que en local
+            Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture(scope="function")
 def client(db_session):
@@ -32,9 +42,6 @@ def client(db_session):
         yield db_session
     
     app.dependency_overrides[get_db] = override_get_db
-    
-    # CORRECTION : Simple création sans problème de version
     client = TestClient(app)
     yield client
-    
     app.dependency_overrides.clear()
