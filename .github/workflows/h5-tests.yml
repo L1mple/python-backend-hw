@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12"]
+        python-version: ["3.12"]  # Testons d'abord avec une seule version
 
     services:
       postgres:
@@ -45,22 +45,17 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-test.txt
 
-    - name: Set Python path
+    - name: Install local package
       working-directory: hw5/hw
       run: |
-        echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
-        echo "Current directory: $(pwd)"
-        echo "Files in directory:"
-        ls -la
+        pip install -e .
 
     - name: Run tests with coverage
       working-directory: hw5/hw
       env:
         DATABASE_URL: postgresql://postgres:password@postgres:5432/test_db
-        PYTHONPATH: ${{ github.workspace }}/hw5/hw
       run: |
-        python -c "import sys; print('Python path:', sys.path)"
-        pytest --cov=shop_api --cov-report=xml --cov-report=term-missing
+        pytest --cov=shop_api --cov-report=xml --cov-report=term-missing -v
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
