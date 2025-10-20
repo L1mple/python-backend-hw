@@ -3,8 +3,7 @@ global:
   evaluation_interval: 10s
 
 scrape_configs:
-  - job_name: "shop-api"
+  - job_name: shop-api
     metrics_path: /metrics
-    scheme: http
     static_configs:
-      - targets: ["shop-api:3000"] # имя сервиса из compose
+      - targets: ["shop-api:3000"]
