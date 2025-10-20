@@ -12,7 +12,6 @@ def int_id_generator() -> Iterable[int]:
         yield i
         i += 1
 
-
 _id_generator = int_id_generator()
 
 
