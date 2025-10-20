@@ -2,6 +2,11 @@
 fastapi>=0.117.1
 uvicorn>=0.24.0
 
+# База данных
+sqlalchemy>=2.0.0
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
+
 # Зависимости для тестирования
 pytest>=7.4.0
 pytest-asyncio>=0.21.0

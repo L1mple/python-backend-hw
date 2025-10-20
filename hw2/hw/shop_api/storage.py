@@ -1,53 +1,75 @@
 from typing import Optional
+from sqlalchemy.orm import Session
+from shop_api.db_models import SessionLocal, Item, Cart, CartItem, init_db
 
 
 class Storage:
-
     def __init__(self):
-        self.items: dict[int, dict] = {}
-        self.carts: dict[int, dict] = {}
-        self.item_id_counter = 0
-        self.cart_id_counter = 0
+        init_db()
+
+    def _get_db(self) -> Session:
+        return SessionLocal()
 
     def create_item(self, name: str, price: float) -> dict:
-        self.item_id_counter += 1
-        new_item = {
-            "id": self.item_id_counter,
-            "name": name,
-            "price": price,
-            "deleted": False
-        }
-        self.items[self.item_id_counter] = new_item
-        return new_item
+        db = self._get_db()
+        try:
+            new_item = Item(name=name, price=price)
+            db.add(new_item)
+            db.commit()
+            db.refresh(new_item)
+            return {"id": new_item.id, "name": new_item.name, "price": new_item.price, "deleted": new_item.deleted}
+        finally:
+            db.close()
 
     def get_item(self, item_id: int) -> Optional[dict]:
-        return self.items.get(item_id)
+        db = self._get_db()
+        try:
+            item = db.query(Item).filter(Item.id == item_id).first()
+            if item:
+                return {"id": item.id, "name": item.name, "price": item.price, "deleted": item.deleted}
+            return None
+        finally:
+            db.close()
 
     def update_item(self, item_id: int, name: Optional[str] = None, price: Optional[float] = None) -> Optional[dict]:
-        if item_id not in self.items:
-            return None
-
-        if name is not None:
-            self.items[item_id]['name'] = name
-        if price is not None:
-            self.items[item_id]['price'] = price
-
-        return self.items[item_id]
+        db = self._get_db()
+        try:
+            item = db.query(Item).filter(Item.id == item_id).first()
+            if not item:
+                return None
+            if name is not None:
+                item.name = name
+            if price is not None:
+                item.price = price
+            db.commit()
+            return {"id": item.id, "name": item.name, "price": item.price, "deleted": item.deleted}
+        finally:
+            db.close()
 
     def replace_item(self, item_id: int, name: str, price: float) -> Optional[dict]:
-        if item_id not in self.items:
-            return None
-
-        self.items[item_id]['name'] = name
-        self.items[item_id]['price'] = price
-        return self.items[item_id]
+        db = self._get_db()
+        try:
+            item = db.query(Item).filter(Item.id == item_id).first()
+            if not item:
+                return None
+            item.name = name
+            item.price = price
+            db.commit()
+            return {"id": item.id, "name": item.name, "price": item.price, "deleted": item.deleted}
+        finally:
+            db.close()
 
     def delete_item(self, item_id: int) -> Optional[dict]:
-        if item_id not in self.items:
-            return None
-
-        self.items[item_id]['deleted'] = True
-        return self.items[item_id]
+        db = self._get_db()
+        try:
+            item = db.query(Item).filter(Item.id == item_id).first()
+            if not item:
+                return None
+            item.deleted = True
+            db.commit()
+            return {"id": item.id, "name": item.name, "price": item.price, "deleted": item.deleted}
+        finally:
+            db.close()
 
     def get_all_items(
         self,
@@ -57,68 +79,86 @@ class Storage:
         max_price: Optional[float] = None,
         show_deleted: bool = False
     ) -> list[dict]:
-        all_items = list(self.items.values())
+        db = self._get_db()
+        try:
+            query = db.query(Item)
+            if not show_deleted:
+                query = query.filter(Item.deleted == False)
+            if min_price is not None:
+                query = query.filter(Item.price >= min_price)
+            if max_price is not None:
+                query = query.filter(Item.price <= max_price)
 
-        if not show_deleted:
-            all_items = [item for item in all_items if not item['deleted']]
-
-        if min_price is not None:
-            all_items = [item for item in all_items if item['price'] >= min_price]
-        if max_price is not None:
-            all_items = [item for item in all_items if item['price'] <= max_price]
-
-        return all_items[offset:offset + limit]
-
+            items = query.offset(offset).limit(limit).all()
+            return [{"id": i.id, "name": i.name, "price": i.price, "deleted": i.deleted} for i in items]
+        finally:
+            db.close()
 
     def create_cart(self) -> int:
-        self.cart_id_counter += 1
-        self.carts[self.cart_id_counter] = {
-            "id": self.cart_id_counter,
-            "items": {}  # {item_id: quantity}
-        }
-        return self.cart_id_counter
+        db = self._get_db()
+        try:
+            new_cart = Cart()
+            db.add(new_cart)
+            db.commit()
+            db.refresh(new_cart)
+            return new_cart.id
+        finally:
+            db.close()
 
     def get_cart(self, cart_id: int) -> Optional[dict]:
-        if cart_id not in self.carts:
-            return None
+        db = self._get_db()
+        try:
+            cart = db.query(Cart).filter(Cart.id == cart_id).first()
+            if not cart:
+                return None
 
-        cart_data = self.carts[cart_id]
-        items_list = []
-        total_price = 0.0
+            items_list = []
+            total_price = 0.0
 
-        for item_id, quantity in cart_data["items"].items():
-            item = self.get_item(item_id)
-            if item:
-                available = not item['deleted']
-                items_list.append({
-                    "id": item_id,
-                    "name": item['name'],
-                    "quantity": quantity,
-                    "available": available
-                })
+            cart_items = db.query(CartItem).filter(CartItem.cart_id == cart_id).all()
+            for cart_item in cart_items:
+                item = db.query(Item).filter(Item.id == cart_item.item_id).first()
+                if item:
+                    available = not item.deleted
+                    items_list.append({
+                        "id": item.id,
+                        "name": item.name,
+                        "quantity": cart_item.quantity,
+                        "available": available
+                    })
+                    if available:
+                        total_price += item.price * cart_item.quantity
 
-                if available:
-                    total_price += item['price'] * quantity
-
-        return {
-            "id": cart_id,
-            "items": items_list,
-            "price": total_price
-        }
+            return {"id": cart_id, "items": items_list, "price": total_price}
+        finally:
+            db.close()
 
     def add_item_to_cart(self, cart_id: int, item_id: int) -> bool:
-        if cart_id not in self.carts:
-            return False
-        if item_id not in self.items:
-            return False
+        db = self._get_db()
+        try:
+            cart = db.query(Cart).filter(Cart.id == cart_id).first()
+            if not cart:
+                return False
 
-        cart = self.carts[cart_id]
-        if item_id in cart["items"]:
-            cart["items"][item_id] += 1
-        else:
-            cart["items"][item_id] = 1
+            item = db.query(Item).filter(Item.id == item_id).first()
+            if not item:
+                return False
 
-        return True
+            cart_item = db.query(CartItem).filter(
+                CartItem.cart_id == cart_id,
+                CartItem.item_id == item_id
+            ).first()
+
+            if cart_item:
+                cart_item.quantity += 1
+            else:
+                cart_item = CartItem(cart_id=cart_id, item_id=item_id, quantity=1)
+                db.add(cart_item)
+
+            db.commit()
+            return True
+        finally:
+            db.close()
 
     def get_all_carts(
         self,
@@ -129,25 +169,30 @@ class Storage:
         min_quantity: Optional[int] = None,
         max_quantity: Optional[int] = None
     ) -> list[dict]:
-        all_carts = []
+        db = self._get_db()
+        try:
+            carts = db.query(Cart).all()
+            result = []
 
-        for cart_id in self.carts:
-            cart = self.get_cart(cart_id)
-            if cart:
-                if min_price is not None and cart['price'] < min_price:
-                    continue
-                if max_price is not None and cart['price'] > max_price:
-                    continue
+            for cart in carts:
+                cart_data = self.get_cart(cart.id)
+                if cart_data:
+                    if min_price is not None and cart_data['price'] < min_price:
+                        continue
+                    if max_price is not None and cart_data['price'] > max_price:
+                        continue
 
-                total_quantity = sum(item['quantity'] for item in cart['items'])
-                if min_quantity is not None and total_quantity < min_quantity:
-                    continue
-                if max_quantity is not None and total_quantity > max_quantity:
-                    continue
+                    total_quantity = sum(item['quantity'] for item in cart_data['items'])
+                    if min_quantity is not None and total_quantity < min_quantity:
+                        continue
+                    if max_quantity is not None and total_quantity > max_quantity:
+                        continue
 
-                all_carts.append(cart)
+                    result.append(cart_data)
 
-        return all_carts[offset:offset + limit]
+            return result[offset:offset + limit]
+        finally:
+            db.close()
 
 
 storage = Storage()
