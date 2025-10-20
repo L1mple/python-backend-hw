@@ -1,6 +1,5 @@
 name: "HW5 Tests"
 
-# Se déclenche seulement pour les changements dans HW5/hw/
 on:
   pull_request:
     branches: [ main, master ]
@@ -14,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]  # ✅ Test avec 2 versions Python
+        python-version: ["3.12", "3.13"] 
     
     services:
       postgres:
@@ -35,7 +34,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Set up Python ${{ matrix.python-version }}  # ✅ Version dynamique
+    - name: Set up Python ${{ matrix.python-version }} 
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}

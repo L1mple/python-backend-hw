@@ -1,66 +1,39 @@
-name: "HW5 Tests"
+name: "HW2 Tests"
 
-
+# Запускаем тесты при изменении файлов в hw2/hw/
 on:
   pull_request:
-    branches: [ main, master ]
-    paths: [ 'HW5/hw/**' ]
+    branches: [ main ]
+    paths: [ 'hw2/hw/**' ]
   push:
-    branches: [ main, master ]
-    paths: [ 'HW5/hw/**' ]
+    branches: [ main ]
+    paths: [ 'hw2/hw/**' ]
 
 jobs:
-  test-hw5:
+  test-hw2:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]  
+        python-version: ["3.12", "3.13"]
     
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: test_db
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Set up Python ${{ matrix.python-version }}  
+    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
     
     - name: Install dependencies
-      working-directory: HW5/hw
+      working-directory: hw2/hw
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements-test.txt
-    
-    - name: Run tests with coverage
-      working-directory: HW5/hw
-      env:
-        DATABASE_URL: postgresql://postgres:password@postgres:5432/test_db
-      run: |
-        pytest --cov=shop_api --cov-report=xml --cov-report=term-missing
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: HW5/hw/coverage.xml
-        flags: unittests
-        fail_ci_if_error: false
+        pip install -r requirements.txt
 
-    - name: Check 95% coverage threshold
-      working-directory: HW5/hw
+    - name: Run tests
+      working-directory: hw2/hw
+      env:
+        PYTHONPATH: ${{ github.workspace }}/hw2/hw
       run: |
-        python -m coverage report --fail-under=95
+        pytest test_homework2.py -v
