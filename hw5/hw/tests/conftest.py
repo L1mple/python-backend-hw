@@ -6,10 +6,15 @@ import os
 IS_CI = os.getenv('GITHUB_ACTIONS') == 'true'
 
 if IS_CI:
-    # Chemin pour GitHub Actions
-    sys.path.append('/home/runner/work/python-backend-hw/python-backend-hw/hw5/hw')
-    from shop_api.database import Base, get_db
-    from shop_api.main import app
+    # Chemin pour GitHub Actions - CORRIGÉ
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        from shop_api.database import Base, get_db
+        from shop_api.main import app
+    except ImportError:
+        # Fallback si la structure est différente
+        from database import Base, get_db
+        from main import app
     TEST_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@postgres:5432/test_db")
 else:
     # Chemin pour Docker local
