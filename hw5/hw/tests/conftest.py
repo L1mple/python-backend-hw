@@ -2,18 +2,22 @@ import pytest
 import sys
 import os
 
-# Ajoute le répertoire parent au chemin Python
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(current_dir)
-sys.path.insert(0, project_root)
+# Ajoute le répertoire courant au chemin Python
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 
-# Import depuis shop_api (votre structure correcte)
-from shop_api.database import Base, get_db
-from shop_api.main import app
+# Import DEPUIS LA RACINE (hw5/hw)
+try:
+    from database import Base, get_db
+    from main import app
+except ImportError as e:
+    print(f"Import error: {e}")
+    print(f"Current directory: {os.getcwd()}")
+    print(f"Python path: {sys.path}")
+    raise
 
 # Utilise PostgreSQL en CI, SQLite en local
 IS_CI = os.getenv('GITHUB_ACTIONS') == 'true'
