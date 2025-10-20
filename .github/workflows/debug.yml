@@ -1,0 +1,20 @@
+name: "Debug HW5"
+
+on: [push, pull_request]
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Debug structure
+      run: |
+        echo "=== Structure du repo ==="
+        ls -la
+        echo "=== Contenu HW5 ==="
+        ls -la HW5/
+        echo "=== Contenu HW5/hw ==="
+        ls -la HW5/hw/
