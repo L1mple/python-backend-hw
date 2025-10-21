@@ -11,9 +11,6 @@ on:
 jobs:
   test-hw5:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12"]
 
     services:
       postgres:
@@ -34,20 +31,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # 🔎 Étape de diagnostic améliorée
-    - name: Afficher la structure du projet
-      run: |
-        echo "=== Structure du projet ==="
-        pwd
-        echo "=== Contenu de hw5/hw ==="
-        ls -la hw5/hw/ || echo "hw5/hw/ non trouvé"
-        echo "=== Fichier database.py existe ? ==="
-        ls -la hw5/hw/database.py || echo "database.py non trouvé"
-
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.12"
 
     - name: Install dependencies
       working-directory: hw5/hw
@@ -55,61 +42,39 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-test.txt
 
-    # 🎯 CORRECTION : Définir PYTHONPATH APRÈS l'installation
-    - name: Définir PYTHONPATH
+    - name: Debug project structure
       working-directory: hw5/hw
       run: |
-        echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
-        echo "PYTHONPATH défini sur: $(pwd)"
+        echo "=== Structure du projet ==="
+        pwd
+        ls -la
+        echo "=== Test présence database.py ==="
+        ls -la database.py
+        echo "=== Test import manuel ==="
+        python -c "
+        import sys
+        sys.path.append('.')
+        try:
+            from database import Base
+            print('✅ SUCCÈS: database.py peut être importé')
+        except Exception as e:
+            print(f'❌ ÉCHEC: {e}')
+        "
 
-    # 🧪 Lancement des tests avec diagnostic
     - name: Run tests with coverage
       working-directory: hw5/hw
       env:
         DATABASE_URL: postgresql://postgres:password@postgres:5432/test_db
-        # PYTHONPATH est déjà défini dans l'étape précédente
       run: |
-        echo "=== Diagnostic avant tests ==="
-        echo "Répertoire courant: $(pwd)"
+        # Forcer l'ajout du chemin courant à Python
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
         echo "PYTHONPATH: $PYTHONPATH"
-        echo "Fichiers présents:"
-        ls -la
-        echo "=== Chemins Python ==="
-        python -c "import sys; print('\n'.join(sys.path))"
-        echo "=== Test d'import database ==="
-        python -c "from database import Base; print('✅ Import database réussi')" || echo "❌ Import database échoué"
-        echo "=== Lancement des tests ==="
-        pytest --cov=shop_api --cov-report=xml --cov-report=term-missing -v
-      - name: Run tests with coverage
-      working-directory: hw5/hw
-      env:
-        DATABASE_URL: postgresql://postgres:password@postgres:5432/test_db
-        # CORRECTION : PYTHONPATH doit inclure les chemins système + votre projet
-        PYTHONPATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages:/home/runner/work/python-backend-hw/python-backend-hw/hw5/hw
-      run: |
-        echo "=== Diagnostic avant tests ==="
-        echo "Répertoire courant: $(pwd)"
-        echo "PYTHONPATH: $PYTHONPATH"
-        echo "=== Test d'import database ==="
-        python -c "
-        import sys
-        print('Chemins Python:')
-        for path in sys.path:
-            print(f'  - {path}')
-        try:
-            from database import Base
-            print('✅ Import database RÉUSSI')
-        except ImportError as e:
-            print(f'❌ Import database ÉCHOUÉ: {e}')
-            # Essayer l'import absolu
-            import importlib.util
-            spec = importlib.util.spec_from_file_location('database', './database.py')
-            database = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(database)
-            print('✅ Import absolu database RÉUSSI')
-        "
-        echo "=== Lancement des tests ==="
-        pytest --cov=shop_api --cov-report=xml --cov-report=term-missing -v
+        
+        # Test final avant les tests
+        python -c "from database import Base; print('🎉 Import database RÉUSSI!'); from main import app; print('🎉 Import main RÉUSSI!')"
+        
+        # Lancement des tests
+        pytest --cov=shop_api --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
