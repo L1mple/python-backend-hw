@@ -35,8 +35,7 @@ def db_session():
         yield session
     finally:
         session.close()
-        if not IS_CI:  # On nettoie seulement en local
-            Base.metadata.drop_all(bind=engine)
+        Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture(scope="function")
 def client(db_session):
