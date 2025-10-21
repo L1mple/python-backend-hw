@@ -1,4 +1,4 @@
-## ДЗ
+## Задание hw4
 
 За каждый пункт - 1 балл
 
@@ -14,7 +14,7 @@
 показать что нет phantom reads при serializable
 *Тут зависит от того какую БД вы выбрали, разные БД могут поддерживать разные уровни изоляции
 
-## Итог
+## Итог hw 4
 БД в docker-compose.yml — добавлен сервис db: postgres:16, volume, healthcheck.
 
 API переведён на БД — FastAPI + SQLAlchemy 2.x, DSN postgresql+psycopg://shop:shop@db:5432/shop, таблицы items, carts, cart_items.
@@ -85,3 +85,35 @@ T2 SER committed
 T1 SER count2 (same): 1
 T1 SER committed
 ```
+
+
+## hw5
+
+### Задание 
+1) Добиться 95% покрытия тестами вашей второй домашки - 1 балл
+
+2) Настроить автозапуск этих тестов в CI, если вы подключали сторонюю БД, то можно посмотреть вот [сюда](https://dev.to/kashifsoofi/integration-test-postgres-using-github-actions-3lln), чтобы поддержать тесты с ней в CI. По итогу у вас должен получится зеленый пайплайн - оценивается в еще 2 балла.
+
+
+### Итог hw5
+
+---
+
+## Локальный прогон (через Docker)
+
+```bash
+# 1) поднять Postgres и API-контейнер
+docker compose up -d
+
+# 2) создать тестовую БД и накатить схему
+docker compose exec db psql -U shop -d postgres -c "CREATE DATABASE shop_test" || true
+docker compose exec db psql -U shop -d shop_test -f /docker-entrypoint-initdb.d/00_init.sql
+
+# 3) запустить тесты внутри контейнера api
+docker compose exec \
+  -e DATABASE_URL="postgresql+psycopg://shop:shop@db:5432/shop_test" \
+  api pytest
+```
+
+## Пример зеленого ci
+https://github.com/safroalex/python-backend-hw/actions/runs/18685722083/job/53277677344
