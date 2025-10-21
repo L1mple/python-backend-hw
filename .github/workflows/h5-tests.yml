@@ -11,6 +11,9 @@ on:
 jobs:
   test-hw5:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
 
     services:
       postgres:
@@ -20,7 +23,7 @@ jobs:
           POSTGRES_PASSWORD: password
           POSTGRES_DB: test_db
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -28,57 +31,80 @@ jobs:
           - 5432:5432
 
     steps:
+    # 🧩 Étape 1 : Récupération du code source
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python
+    # 🧠 Étape 2 : Affichage du répertoire courant
+    - name: Afficher le répertoire courant
+      run: |
+        pwd
+        ls -la
+
+    # 🧠 Étape 3 : Définir le PYTHONPATH
+    - name: Set Python path
+      working-directory: hw5/hw
+      run: |
+        echo "Répertoire courant : $(pwd)"
+        ls -la
+        echo "PYTHONPATH=$(pwd)" >> $GITHUB_ENV
+
+    # 🐍 Étape 4 : Installation de Python
+    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
-        python-version: "3.12"
+        python-version: ${{ matrix.python-version }}
 
-    - name: Wait for PostgreSQL to be ready
-      run: |
-        echo "Waiting for PostgreSQL to be ready..."
-        for i in {1..30}; do
-          nc -z localhost 5432 && echo "PostgreSQL is ready!" && break
-          echo "Waiting for PostgreSQL... attempt $i"
-          sleep 2
-        done
-
+    # 📦 Étape 5 : Installation des dépendances
     - name: Install dependencies
       working-directory: hw5/hw
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements-test.txt
 
-    - name: Test database connection
+    # 🏗️ Étape 6 : Installation du package local
+    - name: Install local package
+      working-directory: hw5/hw
+      run: |
+        pip install -e .
+
+    # 🩺 Étape 7 : Diagnostic d'import
+    - name: Diagnostic imports
       working-directory: hw5/hw
       env:
-        DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
+        PYTHONPATH: ${{ github.workspace }}/hw5/hw
       run: |
-        echo "Testing database connection..."
-        python -c "
-        import psycopg2
-        try:
-            conn = psycopg2.connect('postgresql://postgres:password@localhost:5432/test_db')
-            print('✅ Database connection SUCCESSFUL')
-            conn.close()
-        except Exception as e:
-            print(f'❌ Database connection FAILED: {e}')
-        "
+        echo "=== Test import direct ==="
+        python -c "import database; print('✅ database import ok')"
 
+    # 🕓 Étape 8 : Attente du démarrage de PostgreSQL
+    - name: Wait for PostgreSQL
+      run: |
+        echo "⏳ Attente du démarrage de PostgreSQL..."
+        for i in {1..10}; do
+          nc -z localhost 5432 && echo "✅ PostgreSQL prêt !" && break
+          echo "PostgreSQL pas encore prêt, nouvelle tentative..."
+          sleep 2
+        done
+
+    # 🧪 Étape 9 : Exécution des tests avec couverture
     - name: Run tests with coverage
       working-directory: hw5/hw
       env:
         DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
       run: |
-        # Forcer l'ajout du chemin courant à Python
-        export PYTHONPATH=$PYTHONPATH:$(pwd)
-        echo "Testing imports..."
-        python -c "from database import Base; from main import app; print('✅ All imports successful')"
-        echo "Running tests..."
-        pytest --cov=shop_api --cov-report=xml --cov-report=term-missing
+        echo "=== Diagnostic avant tests ==="
+        echo "Répertoire courant: $(pwd)"
+        echo "PYTHONPATH: $PYTHONPATH"
+        ls -la
+        echo "=== Chemins Python ==="
+        python -c "import sys; print('\n'.join(sys.path))"
+        echo "=== Test d'import database ==="
+        python -c "from database import Base; print('✅ Import database réussi')" || echo "❌ Import database échoué"
+        echo "=== Lancement des tests ==="
+        pytest --cov=shop_api --cov-report=xml --cov-report=term-missing -v
 
+    # 📤 Étape 10 : Upload du rapport de couverture
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
@@ -86,6 +112,7 @@ jobs:
         flags: unittests
         fail_ci_if_error: false
 
+    # ✅ Étape 11 : Vérification du seuil de couverture
     - name: Check 95% coverage threshold
       working-directory: hw5/hw
       run: |
