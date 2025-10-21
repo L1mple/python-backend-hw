@@ -59,10 +59,10 @@ jobs:
             print('✅ SUCCÈS: database.py peut être importé')
         except Exception as e:
             print(f'❌ ÉCHEC: {e}')
-        "
+        " 
 
     - name: Run tests with coverage
-      working-directory: hw5/hw
+      working-directory: hw5/hw    
       env:
         DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
       run: |
