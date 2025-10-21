@@ -17,27 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
-    
-    # ✅ Cache pour accélérer les builds
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
-        cache: 'pip'  # ✅ Cache les dépendances
-        cache-dependency-path: 'hw5/hw/requirements-test.txt'
-
-    - name: Cache pip packages
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('hw5/hw/requirements-test.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+        python-version: ["3.12", "3.13"]  # ✅ Test avec les 2 versions
 
     services:
       postgres:
@@ -54,6 +34,15 @@ jobs:
         ports:
           - 5432:5432
 
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}  # ✅ Version dynamique
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
     - name: Wait for PostgreSQL to be ready
       run: |
         echo "Waiting for PostgreSQL to be ready..."
@@ -69,12 +58,29 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-test.txt
 
+    - name: Test database connection
+      working-directory: hw5/hw
+      env:
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
+      run: |
+        echo "Testing database connection with Python ${{ matrix.python-version }}..."
+        python -c "
+        import psycopg2
+        try:
+            conn = psycopg2.connect('postgresql://postgres:password@localhost:5432/test_db')
+            print('✅ Database connection SUCCESSFUL')
+            conn.close()
+        except Exception as e:
+            print(f'❌ Database connection FAILED: {e}')
+        "
+
     - name: Run tests with coverage
       working-directory: hw5/hw
       env:
         DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
       run: |
         export PYTHONPATH=$PYTHONPATH:$(pwd)
+        echo "Running tests with Python ${{ matrix.python-version }}..."
         pytest --cov=shop_api --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
