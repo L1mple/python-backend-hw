@@ -56,7 +56,7 @@ jobs:
         sys.path.append('.')
         try:
             from database import Base
-            print('✅ SUCCÈS: database.py peut être importé')
+            print('SUCCÈS: database.py peut être importé')
         except Exception as e:
             print(f'❌ ÉCHEC: {e}')
         "
