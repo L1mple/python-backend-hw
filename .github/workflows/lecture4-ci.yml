@@ -1,0 +1,63 @@
+name: lecture4-tests
+
+on:
+  push:
+    paths:
+      - 'lecture4/**'
+      - '.github/workflows/lecture4-ci.yml'
+  pull_request:
+    paths:
+      - 'lecture4/**'
+      - '.github/workflows/lecture4-ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: lecture4  # важное: все команды из lecture4/
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: shop
+          POSTGRES_PASSWORD: shop
+          POSTGRES_DB: shop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U shop -d shop"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=50
+
+    env:
+      # тесты ходят в отдельную БД
+      DATABASE_URL: postgresql+psycopg://shop:shop@localhost:5432/shop_test
+      PYTHONPATH: ${{ github.workspace }}/lecture4
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+
+      - name: Wait for Postgres and create test DB
+        env:
+          PGPASSWORD: shop
+        run: |
+          until psql -h localhost -U shop -d shop -c "SELECT 1" >/dev/null 2>&1; do sleep 1; done
+          psql -h localhost -U shop -d postgres -c "CREATE DATABASE shop_test" || true
+          psql -h localhost -U shop -d shop_test -f init.sql
+
+      - name: Run tests with coverage ≥95%
+        run: pytest
