@@ -1,0 +1,37 @@
+
+services:
+  db:
+    image: postgres:15
+    container_name: shop_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: shop_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: Shop_api
+    command: uvicorn Shop_api.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL= f"postgresql+psycopg2:://postgres:1234@shop_postgres:5432/shop_db"
+    depends_on:
+      db:
+        condition: service_healthy 
+
+volumes:
+  postgres_data:
