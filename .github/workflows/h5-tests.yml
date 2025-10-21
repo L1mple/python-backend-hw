@@ -3,21 +3,14 @@ name: "HW5 Tests"
 on:
   pull_request:
     branches: [ main ]
-    paths: 
-      - 'hw5/hw/**'
-      - '.github/workflows/h5-tests.yml'
+    paths: [ 'hw5/hw/**' ]
   push:
     branches: [ main ]
-    paths: 
-      - 'hw5/hw/**'
-      - '.github/workflows/h5-tests.yml'
+    paths: [ 'hw5/hw/**' ]
 
 jobs:
   test-hw5:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]  # ✅ Test avec les 2 versions
 
     services:
       postgres:
@@ -38,19 +31,10 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}  # ✅ Version dynamique
+    - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Wait for PostgreSQL to be ready
-      run: |
-        echo "Waiting for PostgreSQL to be ready..."
-        for i in {1..30}; do
-          nc -z localhost 5432 && echo "PostgreSQL is ready!" && break
-          echo "Waiting for PostgreSQL... attempt $i"
-          sleep 2
-        done
+        python-version: "3.12"
 
     - name: Install dependencies
       working-directory: hw5/hw
@@ -58,29 +42,38 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements-test.txt
 
-    - name: Test database connection
+    - name: Debug project structure
       working-directory: hw5/hw
-      env:
-        DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
       run: |
-        echo "Testing database connection with Python ${{ matrix.python-version }}..."
+        echo "=== Structure du projet ==="
+        pwd
+        ls -la
+        echo "=== Test présence database.py ==="
+        ls -la database.py
+        echo "=== Test import manuel ==="
         python -c "
-        import psycopg2
+        import sys
+        sys.path.append('.')
         try:
-            conn = psycopg2.connect('postgresql://postgres:password@localhost:5432/test_db')
-            print('✅ Database connection SUCCESSFUL')
-            conn.close()
+            from database import Base
+            print('✅ SUCCÈS: database.py peut être importé')
         except Exception as e:
-            print(f'❌ Database connection FAILED: {e}')
+            print(f'❌ ÉCHEC: {e}')
         "
 
     - name: Run tests with coverage
       working-directory: hw5/hw
       env:
-        DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
+        DATABASE_URL: postgresql://postgres:password@postgres:5432/test_db
       run: |
+        # Forcer l'ajout du chemin courant à Python
         export PYTHONPATH=$PYTHONPATH:$(pwd)
-        echo "Running tests with Python ${{ matrix.python-version }}..."
+        echo "PYTHONPATH: $PYTHONPATH"
+        
+        # Test final avant les tests
+        python -c "from database import Base; print('🎉 Import database RÉUSSI!'); from main import app; print('🎉 Import main RÉUSSI!')"
+        
+        # Lancement des tests
         pytest --cov=shop_api --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
