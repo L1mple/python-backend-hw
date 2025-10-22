@@ -1,0 +1,1 @@
+CREATE DATABASE test_shop_db;

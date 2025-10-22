@@ -1,49 +1,65 @@
-import pytest
+# tests/conftest.py
 import sys
 import os
+import pytest
 
-# Ajout du chemin du projet pour les imports #
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Configuration silencieuse des imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append('/app')
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from database import Base  # ton Base SQLAlchemy
+
 from fastapi.testclient import TestClient
+from main import app  # adapte selon ton projet
+from shop_api.cart.routers import get_db as cart_get_db
 
-from database import Base, get_db
-from main import app
-
-# Détermine si on est dans GitHub Actions (CI)
-IS_CI = os.getenv('GITHUB_ACTIONS') == 'true'
-
-# Choix de la base de données selon l'environnement
+# -------------------------
+# Base de données de test
+# -------------------------
 TEST_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:password@localhost:5432/test_db" if IS_CI else "sqlite:///./test.db"
+    "DATABASE_URL", "postgresql://postgres:password@postgres:5432/test_shop_db"
 )
 
-# Configuration SQLAlchemy
-engine = create_engine(TEST_DATABASE_URL)
+# Engine SQLAlchemy SILENCIEUX
+engine = create_engine(TEST_DATABASE_URL, echo=False)  # echo=False pour supprimer les logs SQL
+
+# Session factory pour les tests
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# -------------------------
+# Fixture : session DB
+# -------------------------
 @pytest.fixture(scope="function")
 def db_session():
-    """Fixture de session de base de données"""
-    Base.metadata.create_all(bind=engine)
+    """
+    Fournit une session SQLAlchemy pour chaque test.
+    Crée toutes les tables avant le test et les supprime après.
+    """
+    Base.metadata.create_all(bind=engine)  # crée les tables
     session = TestingSessionLocal()
     try:
         yield session
+        session.commit()
     finally:
         session.close()
-        Base.metadata.drop_all(bind=engine)
+        Base.metadata.drop_all(bind=engine)  # supprime les tables après le test
 
+# -------------------------
+# Fixture : client FastAPI
+# -------------------------
 @pytest.fixture(scope="function")
 def client(db_session):
-    """Fixture client FastAPI"""
-    def override_get_db():
-        yield db_session
+    def _get_test_db():
+        try:
+            yield db_session
+        finally:
+            pass
 
-    app.dependency_overrides[get_db] = override_get_db
-    client = TestClient(app)
-    yield client
-    app.dependency_overrides.clear()
+    app.dependency_overrides[cart_get_db] = _get_test_db
+
+    with TestClient(app) as c:
+        yield c
+
+    app.dependency_overrides = {}

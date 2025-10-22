@@ -1,12 +1,13 @@
+version: "3.9"
 
 services:
   postgres:
     image: postgres:15
     container_name: shop_postgres
     environment:
-      POSTGRES_DB: shop_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: shop_db
     ports:
       - "5432:5432"
     volumes:
@@ -19,6 +20,7 @@ services:
 
   api:
     build: .
+    container_name: hw_api
     ports:
       - "8080:8080"
     environment:
@@ -28,6 +30,24 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
+
+  tests:
+    build: .
+    container_name: hw_tests
+    environment:
+      - TESTING=1
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/test_shop_db
+      - PYTHONPATH=/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: >
+      bash -c "
+        echo '🧪 Lancement des tests unitaires...';
+        pytest -v --maxfail=1 --disable-warnings
+      "
 
 volumes:
   postgres_data:

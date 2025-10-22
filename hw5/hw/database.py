@@ -1,23 +1,17 @@
+# database.py
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-#from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import declarative_base
-#
+from sqlalchemy.orm import sessionmaker, declarative_base
 import os
 
-if os.getenv("TESTING"):
-    # Pour les tests - SQLite en mémoire (rapide et isolé)
-    DATABASE_URL = "sqlite:///:memory:"
-    # ou
-    DATABASE_URL = "sqlite:///./test.db"
-else:
+def get_database_url():
+    if os.getenv("TESTING"):
+        return "postgresql://postgres:password@postgres:5432/test_shop_db"
+    else:
+        return os.getenv("DATABASE_URL", "postgresql://postgres:password@postgres:5432/shop_db")
 
-    DATABASE_URL = "postgresql://postgres:password@postgres:5432/shop_db"
-
+DATABASE_URL = get_database_url()
 engine = create_engine(DATABASE_URL)
-
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
 def get_db():

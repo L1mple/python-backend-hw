@@ -25,14 +25,14 @@ class TestItemRouters:
             "/item/",
             json={"name": "Test", "price": -10.0}
         )
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
         
         # Données manquantes
         response = client.post(
             "/item/",
             json={"name": "Test"}  # price manquant
         )
-        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
     
     def test_get_item_by_id_success(self, client, db_session):
         """Test la récupération d'un item existant"""

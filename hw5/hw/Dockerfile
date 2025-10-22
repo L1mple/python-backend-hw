@@ -17,11 +17,12 @@ RUN python -m pip install --upgrade pip
 # Créer et définir le répertoire de travail
 WORKDIR /app
 
-# Copier d'abord requirements.txt pour optimiser le cache Docker
-COPY requirements.txt .
+# Copier uniquement le fichier requirements-test.txt
+COPY requirements-test.txt .
 
-# Installer les dépendances Python
-RUN pip install --no-cache-dir -r requirements.txt
+# Installer les dépendances
+RUN pip install --upgrade pip
+RUN pip install -r requirements-test.txt
 
 # Copier le reste de l'application
 COPY . .
