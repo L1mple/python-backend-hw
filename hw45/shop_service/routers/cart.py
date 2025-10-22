@@ -10,8 +10,6 @@ from db.cart import CartService, SqlAlchemyCartRepository
 from db.item import SqlAlchemyItemRepository
 from shop_service.schemas import Cart
 
-from shop_service import data_storage
-
 
 router = APIRouter(
     prefix="/cart",
