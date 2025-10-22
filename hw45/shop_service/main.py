@@ -6,6 +6,7 @@ from db.utils import create_tables
 from shop_service.routers.item import router as item_router
 from shop_service.routers.cart import router as cart_router
 
+create_tables()
 app = FastAPI(title="Shop API")
 
 app.include_router(item_router)
@@ -19,13 +20,11 @@ async def docs_redirect():
     return RedirectResponse(url="/docs", status_code=301)
 
 
-if __name__ == "__main__":
+if name == "main":
     import uvicorn
-    
-    create_tables()
     
     uvicorn.run(
         app,
-        port=7005,
+        port=8080,
         log_level="info",
     )

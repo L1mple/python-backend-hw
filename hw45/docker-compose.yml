@@ -26,6 +26,11 @@ services:
     restart: always
     ports:
       - 8080:8080
+    stdin_open: true  # -i
+    tty: true        # -t
+    depends_on:
+      postgres:
+        condition: service_healthy  # Wait for postgres to be healthy
 
   grafana:
     image: grafana/grafana:latest
