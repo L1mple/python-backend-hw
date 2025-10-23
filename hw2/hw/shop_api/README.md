@@ -359,6 +359,7 @@ hw2/hw/
 ├── shop_api/                      # API магазина
 │   ├── __init__.py
 │   ├── main.py                    # Точка входа приложения (FastAPI)
+│   ├── database.py                # Конфигурация БД (SQLAlchemy)
 │   ├── README.md                  # Документация API
 │   ├── api/
 │   │   ├── __init__.py
@@ -369,6 +370,7 @@ hw2/hw/
 │   ├── data/
 │   │   ├── __init__.py
 │   │   ├── db_models.py           # SQLAlchemy модели (БД)
+│   │   ├── models.py              # Domain модели (dataclasses)
 │   │   ├── item_queries.py        # Работа с товарами (PostgreSQL)
 │   │   └── cart_queries.py        # Работа с корзинами (PostgreSQL)
 │   ├── transaction_scripts/       # Демонстрация уровней изоляции
@@ -381,7 +383,27 @@ hw2/hw/
 │   │   ├── 3_phantom_read_problem.py
 │   │   └── 4_phantom_read_solved.py
 │   └── alembic/                   # Миграции базы данных
+│       ├── alembic.ini
+│       ├── env.py
 │       └── versions/
+│
+├── tests/                         # 🧪 Тесты (203 теста, 98% coverage)
+│   ├── conftest.py                # Pytest фикстуры
+│   ├── unit/                      # Unit тесты
+│   │   ├── test_contracts.py
+│   │   ├── test_db_models.py
+│   │   ├── test_routes.py
+│   │   └── test_database_config.py
+│   ├── integration/               # Integration тесты
+│   │   ├── test_item_queries.py
+│   │   ├── test_cart_queries.py
+│   │   └── test_database_session.py
+│   └── e2e/                       # End-to-End тесты
+│       ├── test_item_api.py
+│       ├── test_cart_api.py
+│       ├── test_workflows.py
+│       ├── test_edge_cases.py
+│       └── test_validation.py
 │
 ├── chat/                          # WebSocket чат
 │   ├── __init__.py
@@ -402,12 +424,13 @@ hw2/hw/
 │   ├── throughput.png
 │   └── https_status_codes.png
 │
+├── .coveragerc                    # Конфигурация coverage
+├── pytest.ini                     # Конфигурация pytest
 ├── Dockerfile                     # Docker образ для Shop API
-├── docker-compose.yml             # Оркестрация (shop + prometheus + grafana)
+├── docker-compose.yml             # Оркестрация (shop + postgres + prometheus + grafana)
 ├── grafana-dashboard.json         # Готовый дашборд Grafana
 ├── generate_errors.py             # Скрипт генерации нагрузки и ошибок
-├── requirements.txt               # Python зависимости
-└── test_homework2.py              # Тесты для Shop API
+└── requirements.txt               # Python зависимости
 ```
 
 ## Мониторинг и метрики
@@ -580,3 +603,179 @@ python 3_phantom_read_problem.py
 python 4_phantom_read_solved.py
 ```
 
+## 🧪 Тестирование
+
+### Структура тестов
+
+Проект содержит **203 теста** с покрытием кода **98%**.
+
+```
+tests/
+├── conftest.py              # Фикстуры (client, db_session)
+├── unit/                    # Unit тесты (изолированные)
+│   ├── test_contracts.py    # Pydantic модели
+│   ├── test_db_models.py    # SQLAlchemy модели
+│   ├── test_routes.py       # HTTP handlers (edge cases)
+│   └── test_database_config.py
+├── integration/             # Integration тесты (с БД)
+│   ├── test_item_queries.py     # CRUD операции товаров
+│   ├── test_cart_queries.py     # CRUD операции корзин
+│   └── test_database_session.py
+└── e2e/                     # End-to-End тесты (полный flow)
+    ├── test_item_api.py     # REST API товаров
+    ├── test_cart_api.py     # REST API корзин
+    ├── test_workflows.py    # Бизнес-сценарии
+    ├── test_edge_cases.py   # Граничные случаи
+    └── test_validation.py   # Валидация входных данных
+```
+
+### Запуск тестов
+
+```bash
+# Все тесты
+pytest
+
+# Тесты с покрытием
+pytest --cov=shop_api --cov-report=term-missing
+
+# Только unit тесты
+pytest -m unit
+
+# Только integration тесты
+pytest -m integration
+
+# Только E2E тесты
+pytest -m e2e
+
+# С подробным выводом
+pytest -vv
+
+# Проверка минимального coverage (95%)
+pytest --cov=shop_api --cov-fail-under=95
+```
+
+### Особенности тестирования
+
+#### ✅ Валидация входных данных
+
+API проверяет корректность данных:
+
+```python
+# ❌ Отрицательная цена
+POST /item/ {"name": "Item", "price": -10.0}
+→ 422 Unprocessable Entity
+
+# ❌ Пустое имя
+POST /item/ {"name": "", "price": 10.0}
+→ 422 Unprocessable Entity
+
+# ❌ Слишком длинное имя (>255 символов)
+POST /item/ {"name": "A"*256, "price": 10.0}
+→ 422 Unprocessable Entity
+
+# ✅ Корректные данные
+POST /item/ {"name": "Valid Item", "price": 99.99}
+→ 201 Created
+```
+
+#### 🗄️ Тестовая база данных
+
+Тесты используют отдельную PostgreSQL БД:
+
+- **Автоматическое создание/очистка** БД для каждого теста
+- **Изолированные транзакции** - rollback после каждого теста
+- **Миграции Alembic** применяются автоматически
+
+#### 📊 Coverage отчет
+
+```bash
+# HTML отчет
+pytest --cov=shop_api --cov-report=html
+
+# Открыть в браузере
+open htmlcov/index.html
+```
+
+### Типы тестов
+
+#### Unit тесты (`tests/unit/`)
+- Тестируют отдельные компоненты
+- Используют моки для изоляции
+- Очень быстрые (без БД)
+
+#### Integration тесты (`tests/integration/`)
+- Тестируют взаимодействие с БД
+- Проверяют SQL queries
+- Используют реальную PostgreSQL
+
+#### E2E тесты (`tests/e2e/`)
+- Тестируют полный HTTP → Routes → Queries → DB flow
+- Проверяют бизнес-сценарии
+- Максимально близки к реальному использованию
+
+### CI/CD
+
+Тесты автоматически запускаются в GitHub Actions:
+
+```yaml
+# .github/workflows/hw5-tests.yml
+- name: Run tests with coverage
+  run: |
+    cd hw2/hw
+    pytest --cov=shop_api --cov-report=xml --cov-fail-under=95
+```
+
+### Примеры тестов
+
+#### Unit тест (Pydantic валидация)
+```python
+def test_create_item_with_negative_price():
+    with pytest.raises(ValidationError):
+        ItemRequest(name="Item", price=-10.0)
+```
+
+#### Integration тест (БД операции)
+```python
+async def test_add_item_to_database(db_session):
+    info = ItemInfo(name="Book", price=10.0, deleted=False)
+    item = await item_queries.add(db_session, info)
+
+    assert item.id is not None
+    assert item.info.name == "Book"
+```
+
+#### E2E тест (HTTP API)
+```python
+async def test_create_and_get_item(client):
+    # Создаем товар
+    response = await client.post(
+        "/item/",
+        json={"name": "iPhone", "price": 99990.0}
+    )
+    assert response.status_code == 201
+    item_id = response.json()["id"]
+
+    # Получаем товар
+    response = await client.get(f"/item/{item_id}")
+    assert response.status_code == 200
+    assert response.json()["name"] == "iPhone"
+```
+
+### Отладка тестов
+
+```bash
+# Запустить конкретный тест
+pytest tests/e2e/test_item_api.py::TestItemCRUD::test_create_item
+
+# Остановиться на первом падении
+pytest -x
+
+# Показать локальные переменные при ошибке
+pytest --showlocals
+
+# Запустить последний упавший тест
+pytest --lf
+
+# Интерактивная отладка
+pytest --pdb
+```

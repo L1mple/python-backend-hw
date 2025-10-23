@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ...data.models import (
     CartItemInfo,
@@ -59,16 +59,16 @@ class ItemResponse(BaseModel):
 
 
 class ItemRequest(BaseModel):
-    name: str
-    price: float
+    name: str = Field(min_length=1, max_length=255)
+    price: float = Field(gt=0)
 
     def as_item_info(self) -> ItemInfo:
         return ItemInfo(name=self.name, price=self.price, deleted=False)
 
 
 class PatchItemRequest(BaseModel):
-    name: str | None = None
-    price: float | None = None
+    name: str | None = Field(None, min_length=1, max_length=255)
+    price: float | None = Field(None, gt=0)
 
     model_config = ConfigDict(extra="forbid")
 
