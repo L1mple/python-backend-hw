@@ -15,9 +15,8 @@ class TestEdgeCases:
         
         item_entity = ItemEntity(id=db_item.id, info=item_info)
         
-        # Essayer d'ajouter à un panier inexistant
         result = cart_queries.add(999999, item_entity, db_session)
-        assert result is None  # Devrait retourner None
+        assert result is None  
 
     def test_get_many_carts_edge_cases(self, db_session):
         """Test get_many avec des filtres extrêmes"""
