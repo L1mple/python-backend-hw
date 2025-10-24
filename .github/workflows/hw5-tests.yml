@@ -1,4 +1,4 @@
-name: "HW2 Tests"
+name: "HW5 Tests"
 
 # Запускаем тесты при изменении файлов в hw5/
 on:
@@ -10,7 +10,7 @@ on:
     paths: [ 'hw5/**' ]
 
 jobs:
-  test-hw2:
+  test-hw5:
     runs-on: ubuntu-latest
     strategy:
       matrix:
