@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, krasnobaeva/hw_4_5 ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, krasnobaeva/hw_4_5 ]
 
 jobs:
   test:
