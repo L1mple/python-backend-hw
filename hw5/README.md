@@ -4,16 +4,23 @@
 
 2) Настроить автозапуск этих тестов в CI, если вы подключали сторонюю БД, то можно посмотреть вот [сюда](https://dev.to/kashifsoofi/integration-test-postgres-using-github-actions-3lln), чтобы поддержать тесты с ней в CI. По итогу у вас должен получится зеленый пайплайн - оценивается в еще 2 балла.
 
+## Полезные команды
 
-```bash
+Установка переменной окружения (для Windows PowerShell):
+
+```powershell
 $env:PYTHONPATH = "$PWD"
 ```
+
+Запуск тестов с покрытием:
 
 ```bash
 pytest --cov=shop_api/routers
 ```
 
-## tests coverage 
+## Текущее покрытие тестами
+
+```
 Name                              Stmts   Miss  Cover
 -----------------------------------------------------
 shop_api\__init__.py                  0      0   100%
@@ -33,3 +40,4 @@ shop_api\routers\cart.py             32      0   100%
 shop_api\routers\item.py             42      0   100%
 -----------------------------------------------------
 TOTAL                               309      2    99%
+```
