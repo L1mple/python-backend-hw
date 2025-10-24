@@ -1,5 +1,10 @@
 services:
   shop-api:
+    environment:
+      - DATABASE_URL=postgresql://shop_user:shop_pass@postgres:5432/shop_db
+    depends_on:
+      postgres:
+        condition: service_healthy
     build:
       context: .
       dockerfile: ./Dockerfile
@@ -51,6 +56,25 @@ services:
     depends_on:
       - prometheus
 
+  postgres:
+    image: postgres:15
+    container_name: shop-db
+    environment:
+      POSTGRES_USER: shop_user
+      POSTGRES_PASSWORD: shop_pass
+      POSTGRES_DB: shop_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_db"]  # ← добавь -d shop_db
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
 networks:
   monitoring:
     driver: bridge
@@ -58,3 +82,4 @@ networks:
 volumes:
   prometheus_data:
   grafana_data:
+  postgres_data:

@@ -2,3 +2,6 @@ fastapi==0.115.0
 uvicorn[standard]==0.31.0
 pydantic==2.9.2
 prometheus-fastapi-instrumentator==7.0.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+alembic==1.12.1  

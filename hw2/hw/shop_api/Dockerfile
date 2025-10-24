@@ -7,7 +7,7 @@ ARG PYTHONFAULTHANDLER=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PIP_DEFAULT_TIMEOUT=500
 
-RUN apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y gcc curl && rm -rf /var/lib/apt/lists/*
 
 RUN python -m pip install --upgrade pip
 
@@ -18,7 +18,7 @@ RUN pip install -r requirements.txt
 
 COPY . ./
 
-FROM base as local
+FROM base AS local
 
 EXPOSE 8000
 
