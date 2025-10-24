@@ -12,7 +12,7 @@ router = APIRouter(prefix="/item", tags=["items"])
 def get_item_service(db: Session = Depends(get_db)) -> ItemService:
     return ItemService(db)
 
-@router.post("", response_model=ItemResponse)
+@router.post("", status_code=201, response_model=ItemResponse)
 async def create_item(
     item: ItemCreate,
     item_service: ItemService = Depends(get_item_service)
@@ -53,7 +53,7 @@ async def update_item(
 ):
     return item_service.update_item(item_id, item)
 
-@router.delete("/{item_id}")
+@router.delete("/{item_id}", status_code=200)
 async def delete_item(
     item_id: int,
     item_service: ItemService = Depends(get_item_service)

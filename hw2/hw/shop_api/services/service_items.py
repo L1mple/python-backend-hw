@@ -40,11 +40,18 @@ class ItemService:
                 models.Item.id == item_id
             ).first()
             
-            if not item or item.deleted:
+            if not item:
                 raise HTTPException(
                     status_code=HTTPStatus.NOT_FOUND, 
                     detail="Item not found"
                 )
+                
+            if item.deleted:
+                raise HTTPException(
+                    status_code=HTTPStatus.NOT_FOUND,
+                    detail="Item not found"
+                )
+                
             return self._item_to_response(item)
             
         except SQLAlchemyError as e:
@@ -141,8 +148,20 @@ class ItemService:
     
     def delete_item(self, item_id: int) -> dict:
         try:
-            db_item = self.get_item_orm(item_id)
-            db_item.deleted = True
+            item = self.db.query(models.Item).filter(
+                models.Item.id == item_id
+            ).first()
+            
+            if not item:
+                raise HTTPException(
+                    status_code=HTTPStatus.NOT_FOUND, 
+                    detail="Item not found"
+                )
+                
+            if item.deleted:
+                return {"message": "Item already deleted"}
+            
+            item.deleted = True
             self.db.commit()
             return {"message": "Item deleted successfully"}
             
@@ -159,11 +178,18 @@ class ItemService:
             models.Item.id == item_id
         ).first()
         
-        if not item or item.deleted:
+        if not item:
             raise HTTPException(
                 status_code=HTTPStatus.NOT_FOUND, 
                 detail="Item not found"
             )
+
+        if item.deleted:
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_MODIFIED,
+                detail="Item is deleted"
+            )
+            
         return item
 
     def _item_to_response(self, item: models.Item) -> factory.ItemResponse:

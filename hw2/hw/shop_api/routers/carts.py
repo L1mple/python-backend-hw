@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from fastapi import Response
 from ..database import get_db
 from ..services.service_carts import CartService
 from ..factory import CartResponse
@@ -11,11 +12,16 @@ router = APIRouter(prefix="/cart", tags=["carts"])
 def get_cart_service(db: Session = Depends(get_db)) -> CartService:
     return CartService(db)
 
-@router.post("")
+@router.post("", status_code=201)
 async def create_cart(
     cart_service: CartService = Depends(get_cart_service)
 ):
-    return cart_service.create_cart()
+    cart_response = cart_service.create_cart()
+    return Response(
+        content=cart_response.json(),
+        status_code=201,
+        headers={"Location": f"/cart/{cart_response.id}"}
+    )
 
 @router.get("/{cart_id}", response_model=CartResponse)
 async def get_cart(
