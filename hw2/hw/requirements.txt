@@ -6,6 +6,7 @@ pydantic-settings==2.6.0
 
 # База данных
 sqlalchemy==2.0.35
+psycopg2-binary==2.9.10
 
 # Тестирование
 pytest==8.3.3
