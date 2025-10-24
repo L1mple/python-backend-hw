@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field, ConfigDict
 app = FastAPI(title="Shop API")
 
 
-# In-memory storage
 class Item(BaseModel):
     id: int
     name: str
@@ -82,7 +81,6 @@ def cart_to_response(cart: Cart) -> dict:
     for cart_item in cart.items.values():
         item = items_store.get(cart_item.item_id)
         if item is None:
-            # Skip unknown items silently
             continue
         response_items.append(
             {
@@ -99,7 +97,6 @@ def cart_to_response(cart: Cart) -> dict:
     }
 
 
-# Item endpoints
 @app.post("/item", status_code=201)
 def create_item(item_in: ItemCreate):
     item_id = get_next_item_id()
@@ -173,11 +170,9 @@ def delete_item(item_id: int):
     if item is not None:
         item.deleted = True
         items_store[item_id] = item
-    # Idempotent delete
     return {"status": "ok"}
 
 
-# Cart endpoints
 @app.post("/cart", status_code=201)
 def create_cart(response: Response):
     cart_id = get_next_cart_id()
@@ -205,7 +200,6 @@ def list_carts(
 ):
     carts: List[Cart] = list(carts_store.values())
 
-    # Apply per-cart filters
     def within_price(cart: Cart) -> bool:
         price = compute_cart_price(cart)
         if min_price is not None and price < min_price:
@@ -245,7 +239,6 @@ def add_item_to_cart(cart_id: int, item_id: int):
     return cart_to_response(cart)
 
 
-# WebSocket chat (extra task)
 class ChatRoomManager:
     def __init__(self) -> None:
         self.rooms: Dict[str, set[WebSocket]] = {}
@@ -263,7 +256,6 @@ class ChatRoomManager:
         if connections is not None and websocket in connections:
             connections.remove(websocket)
             if not connections:
-                # remove empty room
                 self.rooms.pop(room, None)
         self.usernames.pop(websocket, None)
 
@@ -274,7 +266,6 @@ class ChatRoomManager:
             try:
                 await ws.send_text(message)
             except Exception:
-                # Best-effort sending; drop failed connections
                 self.disconnect(room, ws)
 
     def username_for(self, websocket: WebSocket) -> str:
