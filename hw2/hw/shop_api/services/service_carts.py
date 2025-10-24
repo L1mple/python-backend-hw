@@ -32,7 +32,7 @@ class CartService:
                 status_code=HTTPStatus.NOT_FOUND, 
                 detail="Cart not found"
             )
-        print(f"DEBUG: Cart {cart_id} price from DB: {cart.price}")
+        # print(f"DEBUG: Cart {cart_id} price from DB: {cart.price}")
 
         self._update_cart_price(cart)
         self.db.commit()
@@ -98,20 +98,20 @@ class CartService:
 
 
         for i, cart_item in enumerate(cart_items):
-            print(f"DEBUG: CartItem {i}: id={cart_item.id}, item_id={cart_item.item_id}, quantity={cart_item.quantity}")
+            # print(f"DEBUG: CartItem {i}: id={cart_item.id}, item_id={cart_item.item_id}, quantity={cart_item.quantity}")
             
             if cart_item.item:
                 item_price = cart_item.item.price
                 quantity = cart_item.quantity
                 item_total = item_price * quantity
                 
-                print(f"DEBUG:   Item {cart_item.item_id} - name: {cart_item.item.name}, price: {item_price}, quantity: {quantity}, total: {item_total}")
+                # print(f"DEBUG:   Item {cart_item.item_id} - name: {cart_item.item.name}, price: {item_price}, quantity: {quantity}, total: {item_total}")
                 
                 total_price += item_total
-            else:
-                print(f"DEBUG:   CartItem {cart_item.id} has no associated item")
+            # else:
+            #     print(f"DEBUG:   CartItem {cart_item.id} has no associated item")
         
-        print(f"DEBUG: Total cart price: {total_price}")
+        # print(f"DEBUG: Total cart price: {total_price}")
         cart.price = total_price
         
 
@@ -123,7 +123,7 @@ class CartService:
             models.CartItem.cart_id == cart.id
         ).join(models.Item).all()
         
-        print(f"DEBUG: _cart_to_response - Found {len(cart_items_db)} cart_items in DB")
+        # print(f"DEBUG: _cart_to_response - Found {len(cart_items_db)} cart_items in DB")
         
         for cart_item in cart_items_db:
             # Вычисляем availability для каждого товара
@@ -132,7 +132,7 @@ class CartService:
                 not cart_item.item.deleted
             )
             
-            print(f"DEBUG: _cart_to_response - item_id: {cart_item.item_id}, quantity: {cart_item.quantity}, price: {cart_item.item.price if cart_item.item else 'N/A'}")
+            # print(f"DEBUG: _cart_to_response - item_id: {cart_item.item_id}, quantity: {cart_item.quantity}, price: {cart_item.item.price if cart_item.item else 'N/A'}")
             
             cart_items.append(factory.CartItem(
                 id=cart_item.item_id,
@@ -148,7 +148,7 @@ class CartService:
             created_at=cart.created_at
         )
         
-        print(f"DEBUG: _cart_to_response - Final response price: {response.price}")
+        # print(f"DEBUG: _cart_to_response - Final response price: {response.price}")
         
         return response
 

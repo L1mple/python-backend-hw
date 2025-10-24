@@ -112,6 +112,10 @@ def test_get_cart(request, cart: int, not_empty: bool) -> None:
     else:
         assert response_json["price"] == 0.0
 
+def test_get_cart_not_found() -> None:
+    """Проверка GET для несуществующей корзины"""
+    response = client.get("/cart/77777777")
+    assert response.status_code == HTTPStatus.NOT_FOUND
 
 @pytest.mark.parametrize(
     ("query", "status_code"),
@@ -233,6 +237,18 @@ def test_put_item(
         new_item.update(body)
         assert response.json() == new_item
 
+def test_put_deleted_item(existing_item: dict[str, Any]) -> None:
+    """Проверка PUT для удаленного товара"""
+    item_id = existing_item["id"]
+    client.delete(f"/item/{item_id}")
+    response = client.put(f"/item/{item_id}", json={"name": "New", "price": 200.0})
+    assert response.status_code == HTTPStatus.NOT_MODIFIED
+
+def test_put_item_not_found() -> None:
+    """Проверка PUT для несуществующего товара"""
+    response = client.put("/item/77777777", json={"name": "Test", "price": 100.0})
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
 
 @pytest.mark.parametrize(
     ("item", "body", "status_code"),
@@ -270,6 +286,39 @@ def test_patch_item(request, item: str, body: dict[str, Any], status_code: int) 
 
         assert patched_item == patch_response_body
 
+def test_patch_item_not_found() -> None:
+    """Проверка PATCH для несуществующего товара"""
+    response = client.patch("/item/77777777", json={"name": "Test"})
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_item_to_nonexistent_cart(existing_items: list[int]) -> None:
+    """Проверка добавления товара в несуществующую корзину"""
+    response = client.post(f"/cart/77777777/add/{existing_items[0]}")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+def test_add_nonexistent_item_to_cart(existing_empty_cart_id: int) -> None:
+    """Проверка добавления несуществующего товара в корзину"""
+    response = client.post(f"/cart/{existing_empty_cart_id}/add/77777777")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+def test_add_deleted_item_to_cart() -> None:
+    """Проверка что удаленный товар НЕ добавляется в корзину"""
+    item1 = client.post("/item", json={"name": "Pen", "price": 10.0}).json()
+    item_to_delete = client.post("/item", json={"name": "Old", "price": 5.0}).json()
+    
+    client.delete(f"/item/{item_to_delete['id']}")
+    
+    cart = client.post("/cart").json()
+    cart_id = cart["id"]
+    
+    response1 = client.post(f"/cart/{cart_id}/add/{item1['id']}")
+    assert response1.status_code == HTTPStatus.OK
+    initial_data = response1.json()
+    
+    response2 = client.post(f"/cart/{cart_id}/add/{item_to_delete['id']}")
+    assert response2.status_code == HTTPStatus.NOT_FOUND
+    
 
 def test_delete_item(existing_item: dict[str, Any]) -> None:
     item_id = existing_item["id"]
@@ -282,3 +331,8 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+def test_delete_item_not_found() -> None:
+    """Проверка DELETE для несуществующего товара"""
+    response = client.delete("/item/77777777")
+    assert response.status_code == HTTPStatus.NOT_FOUND

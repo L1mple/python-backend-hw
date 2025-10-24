@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from fastapi import Response
+import json
 from ..database import get_db
 from ..services.service_items import ItemService
 from ..factory import ItemCreate, ItemResponse
@@ -18,7 +20,7 @@ async def create_item(
     item_service: ItemService = Depends(get_item_service)
 ):
     return item_service.create_item(item)
-
+    
 @router.get("/{item_id}", response_model=ItemResponse)
 async def get_item(
     item_id: int,
