@@ -7,15 +7,19 @@ ARG PYTHONFAULTHANDLER=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PIP_DEFAULT_TIMEOUT=500
 
-RUN apt-get update && apt-get install -y gcc && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /shop_api
 
-COPY . ./
+COPY requirements.txt .
 
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
+
+COPY . ./
 
 ENV VIRTUAL_ENV=$APP_ROOT/src/.venv \
     PATH=$APP_ROOT/src/.venv/bin:$PATH

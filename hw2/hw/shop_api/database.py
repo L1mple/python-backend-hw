@@ -1,20 +1,20 @@
-from typing import Dict
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 
-class Database:
-    def __init__(self):
-        self.items: Dict[int, dict] = {}
-        self.carts: Dict[int, dict] = {}
-        self._next_item_id = 1
-        self._next_cart_id = 1
-            
-    def get_next_item_id(self) -> int:
-        item_id = self._next_item_id
-        self._next_item_id += 1
-        return item_id
-    
-    def get_next_cart_id(self) -> int:
-        cart_id = self._next_cart_id
-        self._next_cart_id += 1
-        return cart_id
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
 
-db = Database()
+engine = create_engine(
+    DATABASE_URL, 
+    connect_args={"check_same_thread": False}
+)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

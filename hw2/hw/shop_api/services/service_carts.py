@@ -1,98 +1,131 @@
-from ..database import Database
-from fastapi import Response, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy import and_
+from .. import models, factory
+from fastapi import HTTPException
 from http import HTTPStatus
 from typing import List, Optional
-from pydantic import Field
-import json
-
 
 class CartService:
-    def __init__(self, database: Database):
-        self.db = database
+    def __init__(self, db: Session):
+        self.db = db
 
-    def create_cart(self) -> dict:
-        cart_id = self.db.get_next_cart_id()
-
-        self.db.carts[cart_id] = {
-            'id': cart_id,
-            'items': [],
-            'price': 0.0
-        }
-        response = Response(
-            content=json.dumps(self.db.carts[cart_id]),
-            status_code=HTTPStatus.CREATED,
-            media_type="application/json",
-            headers={}
+    def create_cart(self) -> factory.CartResponse:
+        cart = models.Cart()
+        self.db.add(cart)
+        self.db.commit()
+        self.db.refresh(cart)
+        return factory.CartResponse(
+            id=cart.id,
+            items=[],
+            price=cart.price,
+            created_at=cart.created_at
         )
-        response.headers["Location"] = f"/cart/{cart_id}"
-        return response
     
-    def get_cart(self, cart_id: int) -> dict:
-        if cart_id not in self.db.carts:
-            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Cart not found")
-
-        cart = self.db.carts[cart_id]
+    def get_cart(self, cart_id: int) -> factory.CartResponse:
+        cart = self.db.query(models.Cart).filter(
+            models.Cart.id == cart_id
+        ).first()
         
-        self._update_cart_items_availability(cart)
-        self._calculate_cart_price(cart)
-
-        return cart
-
-
-    def add_to_cart(self, cart_id: int, item_id: int) -> None:
-        if cart_id not in self.db.carts:
-            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Cart not found")
-    
-        if item_id not in self.db.items:
-            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Item not found or deleted")
+        if not cart:
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND, 
+                detail="Cart not found"
+            )
         
-        if self.db.items[item_id]["deleted"]:
-            raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Item not found or deleted")
+        # Преобразуем ORM объект в Pydantic схему
+        return self._cart_to_response(cart)
 
+    def add_to_cart(self, cart_id: int, item_id: int) -> factory.CartResponse:
+        # Проверяем существование корзины
+        cart = self.db.query(models.Cart).filter(
+            models.Cart.id == cart_id
+        ).first()
+        
+        if not cart:
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND, 
+                detail="Cart not found"
+            )
+            
+        # Проверяем существование товара
+        item = self.db.query(models.Item).filter(
+            and_(
+                models.Item.id == item_id,
+                models.Item.deleted == False
+            )
+        ).first()
+        
+        if not item:
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND, 
+                detail="Item not found or deleted"
+            )
 
-        cart = self.db.carts[cart_id]
-        item_data = self.db.items[item_id]
+        # Проверяем есть ли товар уже в корзине
+        cart_item = self.db.query(models.CartItem).filter(
+            and_(
+                models.CartItem.cart_id == cart_id,
+                models.CartItem.item_id == item_id
+            )
+        ).first()
         
-        # Проверяем, есть ли товар уже в корзине
-        existing_item = None
-        for cart_item in cart["items"]:
-            if cart_item["id"] == item_id:
-                existing_item = cart_item
-                break
-        
-        if existing_item:
-            existing_item["quantity"] += 1
+        if cart_item:
+            cart_item.quantity += 1
         else:
-            # Добавляем новый товар
-            cart["items"].append({
-                "id": item_id,
-                "name": item_data["name"],
-                "quantity": 1,
-                "available": True
-            })
+            cart_item = models.CartItem(
+                cart_id=cart_id,
+                item_id=item_id,
+                quantity=1
+            )
+            self.db.add(cart_item)
         
-        self._update_cart_items_availability(cart)
-        self._calculate_cart_price(cart)
-        return cart
+        self._update_cart_price(cart)
+        self.db.commit()
+        
+        # Возвращаем обновленную корзину
+        return self._cart_to_response(cart)
 
+    def _update_cart_price(self, cart: models.Cart) -> None:
+        total_price = self.db.query(
+            func.sum(models.CartItem.quantity * models.Item.price)
+        ).select_from(models.CartItem).join(
+            models.Item, models.CartItem.item_id == models.Item.id
+        ).filter(
+            and_(
+                models.CartItem.cart_id == cart.id,
+                models.Item.deleted == False
+            )
+        ).scalar() or 0.0
+        
+        cart.price = total_price
 
-    def _update_cart_items_availability(self, cart: dict) -> None:
-        """Обновляет поле available для всех товаров в корзине"""
-        for item in cart["items"]:
-            item_id = item["id"]
-            if item_id in self.db.items and not self.db.items[item_id]["deleted"]:
-                item["available"] = True
-                item["name"] = self.db.items[item_id]["name"]
-            else:
-                item["available"] = False
-    
-    def _calculate_cart_price(self, cart: dict) -> None:
-        """Пересчитывает общую стоимость корзины"""
-        total = 0.0
-        for item in cart["items"]:
-            if item["available"] and item["id"] in self.db.items:
-                total += self.db.items[item["id"]]["price"] * item["quantity"]
-        cart["price"] = total
+    def _cart_to_response(self, cart: models.Cart) -> factory.CartResponse:
+        """Преобразует ORM объект Cart в Pydantic схему CartResponse"""
+        cart_items = []
+        
+        for cart_item in cart.items:
+            # Вычисляем availability для каждого товара
+            item_available = (
+                cart_item.item is not None and 
+                not cart_item.item.deleted
+            )
+            
+            # Создаем CartItemResponse для каждого товара
+            cart_items.append(factory.CartItem(
+                id=cart_item.item_id,
+                name=cart_item.item.name if cart_item.item else "Unknown Item",
+                quantity=cart_item.quantity,
+                available=item_available
+            ))
+        
+        # Создаем финальный ответ
+        return factory.CartResponse(
+            id=cart.id,
+            items=cart_items,
+            price=cart.price,
+            created_at=cart.created_at
+        )
 
     def list_carts(
         self,
@@ -102,31 +135,36 @@ class CartService:
         max_price: Optional[float],
         min_quantity: Optional[int],
         max_quantity: Optional[int]
-    ) -> List[dict]:
-        filtered_carts = []
+    ) -> List[factory.CartResponse]:
+        query = self.db.query(models.Cart)
         
-        for cart in self.db.carts.values():
-            # Обновляем availability и цену
-            self._update_cart_items_availability(cart)
-            self._calculate_cart_price(cart)
-            
-            total_quantity = sum(item["quantity"] for item in cart["items"])
-            price = cart["price"]
-            
-            # Фильтрация по цене
-            if min_price is not None and price < min_price:
-                continue
-            if max_price is not None and price > max_price:
-                continue
-            
-            # Фильтрация по количеству товаров
-            if min_quantity is not None and total_quantity < min_quantity:
-                continue
-            if max_quantity is not None and total_quantity > max_quantity:
-                continue
-                
-            filtered_carts.append(cart)
+        # Subquery for cart quantities
+        quantity_subquery = self.db.query(
+            models.CartItem.cart_id,
+            func.sum(models.CartItem.quantity).label('total_quantity')
+        ).group_by(models.CartItem.cart_id).subquery()
         
-        filtered_carts.sort(key=lambda x: x["id"])
-        return filtered_carts[offset:offset + limit]
+        query = query.outerjoin(
+            quantity_subquery, 
+            models.Cart.id == quantity_subquery.c.cart_id
+        )
         
+        if min_price is not None:
+            query = query.filter(models.Cart.price >= min_price)
+        
+        if max_price is not None:
+            query = query.filter(models.Cart.price <= max_price)
+        
+        if min_quantity is not None:
+            query = query.filter(
+                quantity_subquery.c.total_quantity >= min_quantity
+            )
+        
+        if max_quantity is not None:
+            query = query.filter(
+                quantity_subquery.c.total_quantity <= max_quantity
+            )
+        
+        # Преобразуем все ORM объекты в Pydantic схемы
+        carts = query.offset(offset).limit(limit).all()
+        return [self._cart_to_response(cart) for cart in carts]
