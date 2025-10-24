@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
-from .routers import items, carts
-from .database import Base, engine
-from . import models
+from shop_api.routers import items, carts
+from shop_api.database import Base, engine
+from shop_api import models
 
 Base.metadata.create_all(bind=engine)
 

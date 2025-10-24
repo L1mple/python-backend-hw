@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from fastapi import Response
-from ..database import get_db
-from ..services.service_carts import CartService
-from ..factory import CartResponse
+from shop_api.database import get_db
+from shop_api.services.service_carts import CartService
+from shop_api.factory import CartResponse
 
 
 router = APIRouter(prefix="/cart", tags=["carts"])

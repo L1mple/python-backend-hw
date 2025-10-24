@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from fastapi import Response
 import json
-from ..database import get_db
-from ..services.service_items import ItemService
-from ..factory import ItemCreate, ItemResponse
+from shop_api.database import get_db
+from shop_api.services.service_items import ItemService
+from shop_api.factory import ItemCreate, ItemResponse
 
 
 router = APIRouter(prefix="/item", tags=["items"])

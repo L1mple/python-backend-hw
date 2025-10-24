@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy import and_
-from .. import models, factory
+from shop_api import models, factory
 from fastapi import HTTPException
 from http import HTTPStatus
 from typing import List, Optional
