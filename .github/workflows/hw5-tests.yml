@@ -26,13 +26,13 @@ jobs:
         python-version: ${{ matrix.python-version }}
     
     - name: Install dependencies
-      working-directory: /hw5
+      working-directory: hw5
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
     - name: Run tests
-      working-directory: /hw5
+      working-directory: hw5
       env:
         PYTHONPATH: ${{ github.workspace }}/hw5
       run: |
