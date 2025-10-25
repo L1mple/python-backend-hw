@@ -36,4 +36,4 @@ jobs:
       env:
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
       run: |
-        pytest test_homework2.py -v
+        pytest test_async.py -v --cov=shop_api --cov-report=term --cov-fail-under=95

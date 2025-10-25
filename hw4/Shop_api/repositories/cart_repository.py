@@ -30,8 +30,13 @@ class CartRepository:
             cart_item = CartItem(cart_id=cart.id, item_id=item.id, quantity=quantity)
             self.db.add(cart_item)
 
+        # Correct total_price calculation
+        self.db.flush()  # ensure cart_item is in the session
+        total = 0
+        for ci in self.db.query(CartItem).filter(CartItem.cart_id == cart.id).all():
+            total += ci.quantity * self.db.query(Item).get(ci.item_id).price
+        cart.total_price = total
 
-        cart.total_price = sum(ci.quantity * ci.item.price for ci in cart.items)
         self.db.commit()
         self.db.refresh(cart)
         return cart

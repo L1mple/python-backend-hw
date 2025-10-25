@@ -8,6 +8,7 @@ from Shop_api.schemas import ItemCreate, Item, Cart
 from Shop_api.services.item_service import ItemService
 from Shop_api.services.cart_service import CartService
 from prometheus_fastapi_instrumentator import Instrumentator
+from Shop_api.schemas import CartSchema
 
 app = FastAPI(title="Shop API")
 Instrumentator().instrument(app).expose(app)
@@ -74,10 +75,16 @@ def get_cart(cart_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Cart not found")
     return cart
 
-@app.post("/cart/{cart_id}/add/{item_id}", response_model=Cart)
-def add_item_to_cart(cart_id: int, item_id: int, quantity: Optional[int] = 1, db: Session = Depends(get_db)):
-    service = CartService(db)
-    cart = service.add_item_to_cart(cart_id, item_id, quantity)
-    if not cart:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Cart or Item not found")
-    return cart
+@app.post("/cart/{cart_id}/add/{item_id}", response_model=CartSchema)
+def add_item_to_cart(cart_id: int, item_id: int, quantity: int = 1, db: Session = Depends(get_db)):
+    cart_service = CartService(db)
+    updated_cart = cart_service.add_item_to_cart(cart_id, item_id, quantity)
+
+
+    for cart_item in updated_cart.items:
+        if not hasattr(cart_item.item, "deleted") or cart_item.item.deleted is None:
+            cart_item.item.deleted = False
+        if not hasattr(cart_item.item, "available") or cart_item.item.available is None:
+            cart_item.item.available = True
+
+    return updated_cart

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 class ItemBase(BaseModel):
     name: str
@@ -20,6 +20,7 @@ class CartItem(BaseModel):
     name: str
     quantity: int
     available: bool
+    
 
 class Cart(BaseModel):
     id: int
@@ -28,3 +29,28 @@ class Cart(BaseModel):
 
     class Config:
         from_attributes = True
+        
+class ItemSchema(BaseModel):
+    id: int
+    name: str
+    price: float
+    available: bool
+
+    class Config:
+        orm_mode = True
+
+class CartItemSchema(BaseModel):
+    item: ItemSchema
+    quantity: int
+
+    class Config:
+        orm_mode = True
+
+class CartSchema(BaseModel):
+    id: int
+    total_price: float
+    items: List[CartItemSchema] = []
+
+    class Config:
+        orm_mode = True
+
