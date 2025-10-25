@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from routes.item import app as item_router
-from routes.cart import app as cart_router
+from src.routes.item import app as item_router
+from src.routes.cart import app as cart_router
 
 app = FastAPI(title="HW4 shop_api")
 

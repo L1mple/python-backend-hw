@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from db import Base, engine, get_session
-from repository import CartRepository
+from src.db import Base, engine, get_session
+from src.repository import CartRepository
 
 Base.metadata.create_all(bind=engine)
 

@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
-from db import Base, engine, get_session
-from repository import ItemRepository
+from src.db import Base, engine, get_session
+from src.repository import ItemRepository
 
 Base.metadata.create_all(bind=engine)
 
@@ -27,7 +27,7 @@ class ItemOut(BaseModel):
     price: float
     deleted: bool
 
-app = APIRouter(prefix="item")
+app = APIRouter(prefix="/item")
 
 @app.post("/", response_model=ItemOut, status_code=201)
 def create_item(payload: ItemCreate, db: Session = Depends(get_session)):

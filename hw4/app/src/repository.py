@@ -7,7 +7,7 @@ from sqlalchemy import select, func, literal_column, join
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from models import Item, Cart, CartItem
+from src.models import Item, Cart, CartItem
 
 class ItemRepository:
     def __init__(self, session: Session):
