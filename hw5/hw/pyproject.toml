@@ -1,0 +1,10 @@
+[tool.coverage.run]
+source = ["hw5/hw/shop_api", "shop_api"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*"
+]
+
+[tool.coverage.paths]
+source = ["hw5/hw/shop_api/", "."]
