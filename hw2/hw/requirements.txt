@@ -14,3 +14,8 @@ Faker>=37.8.0
 
 # Зависимости для прометея
 prometheus-fastapi-instrumentator
+
+# Зависимости для базы данных
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+alembic

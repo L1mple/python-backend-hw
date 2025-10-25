@@ -1,10 +1,11 @@
 from typing import Optional, List, Annotated
 from http import HTTPStatus
 
-from fastapi import APIRouter, HTTPException, Query, Response
-from pydantic import NonNegativeInt, PositiveInt
+from fastapi import APIRouter, HTTPException, Query, Response, Depends
+from pydantic import NonNegativeInt, PositiveInt, NonNegativeFloat
 
-from ...store import queries
+from ...data.deps import get_item_repo
+from ...data.repository import ItemRepository
 from ..contracts import ItemRequest, ItemResponse, PatchItemRequest
 
 router = APIRouter(prefix='/item')
@@ -13,26 +14,19 @@ router = APIRouter(prefix='/item')
 async def get_items(
     offset : Annotated[NonNegativeInt, Query()] = 0,
     limit : Annotated[PositiveInt, Query()] = 10,
-    min_price : Optional[float] = None,
-    max_price : Optional[float] = None,
-    show_deleted : bool = False
+    min_price : Optional[Annotated[NonNegativeFloat, Query()]] = None,
+    max_price : Optional[Annotated[NonNegativeFloat, Query()]] = None,
+    show_deleted : bool = False,
+    repo : ItemRepository = Depends(get_item_repo)
 ) -> List[ItemResponse]:
-    if offset < 0:
-        raise HTTPException(
-            HTTPStatus.UNPROCESSABLE_ENTITY,
-            "Offset has to be non-negative integer"
+    return [
+        ItemResponse.from_entity(item)
+        for item in repo.get_items(
+            offset, limit,
+            min_price, max_price,
+            show_deleted
         )
-    if limit <= 0:
-        raise HTTPException(
-            HTTPStatus.UNPROCESSABLE_ENTITY,
-            "Limit has to be positive integer"
-        )
-    if min_price is not None and min_price < 0 or max_price is not None and max_price < 0:
-        raise HTTPException(
-            HTTPStatus.UNPROCESSABLE_ENTITY,
-            "Price has to be non-negative float"
-        )
-    return [ItemResponse.from_entity(e) for e in queries.get_items(offset, limit, min_price, max_price, show_deleted)]
+    ]
 
 @router.get(
     '/{item_id}',
@@ -46,9 +40,10 @@ async def get_items(
     }
 )
 async def get_item(
-    item_id : int
+    item_id : int,
+    repo : ItemRepository = Depends(get_item_repo)
 ) -> ItemResponse:
-    entity = queries.get_item(item_id)
+    entity = repo.find_by_id(item_id)
     if entity is None:
         raise HTTPException(
             HTTPStatus.NOT_FOUND,
@@ -62,9 +57,10 @@ async def get_item(
     status_code=HTTPStatus.CREATED
 )
 def post_item(
-    data : ItemRequest
+    data : ItemRequest,
+    repo : ItemRepository = Depends(get_item_repo)
 ) -> ItemResponse:
-    entity = queries.add_item(data.as_item_info())
+    entity = repo.create(data.as_item())
     return ItemResponse.from_entity(entity)
 
 @router.put(
@@ -80,9 +76,10 @@ def post_item(
 )
 async def put_item(
     item_id : int,
-    data : ItemRequest
+    data : ItemRequest,
+    repo : ItemRepository = Depends(get_item_repo)
 ) -> ItemResponse:
-    entity = queries.update_item(item_id, data.as_item_info())
+    entity = repo.update(item_id, data.as_item())
     if entity is None:
         raise HTTPException(
             HTTPStatus.NOT_MODIFIED,
@@ -104,9 +101,10 @@ async def put_item(
 )
 async def patch_item(
     item_id : int,
-    data : PatchItemRequest
+    data : PatchItemRequest,
+    repo : ItemRepository = Depends(get_item_repo)
 ) -> ItemResponse:
-    entity = queries.patch_item(item_id, data.as_patch_item_info())
+    entity = repo.patch(item_id, data.as_patch_item())
     if entity is None:
         raise HTTPException(
             HTTPStatus.NOT_MODIFIED,
@@ -117,7 +115,8 @@ async def patch_item(
 
 @router.delete('/{item_id}')
 async def delete_item(
-    item_id : int
+    item_id : int,
+    repo : ItemRepository = Depends(get_item_repo)
 ):
-    queries.delete_item(item_id)
+    repo.delete(item_id)
     return Response("")

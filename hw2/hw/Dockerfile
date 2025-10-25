@@ -10,7 +10,7 @@ ARG PYTHONFAULTHANDLER=1 \
 RUN apt-get update && apt-get install -y gcc
 RUN python -m pip install --upgrade pip
 
-WORKDIR /shop
+WORKDIR /app
 
 COPY . .
 
