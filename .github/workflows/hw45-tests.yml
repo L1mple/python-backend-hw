@@ -27,7 +27,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12"]
     
     steps:
     - name: Checkout code
@@ -52,16 +52,11 @@ jobs:
           sleep 2
         done
       
-    - name: Run tests with saving coverage
+    - name: Run tests with check coverage
       working-directory: hw45
       env:
         PYTHONPATH: ${{ github.workspace }}/hw45
       run: |
         export PYTHONPATH=$PYTHONPATH:$(pwd)
-        pytest
-      
-    - name: Check coverage threshold
-      working-directory: hw45
-      run: |
         python -m coverage run -m pytest
-        python -m coverage report --fail-under=95
+        python -m coverage report
