@@ -178,8 +178,11 @@ def replace_item(item_id: int, body: Dict[str, Any], db: Session = Depends(get_d
     if not isinstance(body, dict) or "name" not in body or "price" not in body:
         raise HTTPException(status_code=422)
 
-    existing.name = body["name"]
-    existing.price = float(body["price"])
+    try:
+        existing.name = body["name"]
+        existing.price = float(body["price"])
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422)
     db.commit()
     db.refresh(existing)
     
@@ -212,7 +215,10 @@ def patch_item(item_id: int, body: Dict[str, Any], db: Session = Depends(get_db)
     if "name" in body:
         existing.name = body["name"]
     if "price" in body:
-        existing.price = float(body["price"])
+        try:
+            existing.price = float(body["price"])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422)
     
     db.commit()
     db.refresh(existing)
