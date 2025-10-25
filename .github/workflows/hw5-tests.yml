@@ -10,7 +10,7 @@ on:
     paths: [ 'hw2/hw/**' ]
 
 jobs:
-  test-hw2:
+  test-hw5:
     runs-on: ubuntu-latest
 
     # Добавляем PostgreSQL как service container
@@ -58,4 +58,4 @@ jobs:
         POSTGRES_USER: postgres
         POSTGRES_DB: hw4_db
       run: |
-        pytest -vv --cov=shop_api/ --cov-fail-under=99 ./shop_api/tests
+        pytest -vv --cov=shop_api/ --cov-fail-under=100 ./shop_api/tests
