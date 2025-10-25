@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+
+  local:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: local
+    container_name: shop-api
+    restart: always
+    ports:
+      - "8800:8080"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:password@db:5432/shop_db
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./service:/app/src/service
+
+  db:
+    image: postgres:15
+    container_name: shop_db
+    environment:
+      POSTGRES_DB: shop_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
