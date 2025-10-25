@@ -1,4 +1,5 @@
 from typing import Iterable
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from shop_api.store.models import (
@@ -105,29 +106,42 @@ def get_carts(
         min_quantity: int | None = None,
         max_quantity: int | None = None
     ) -> Iterable[Cart]:
-    # Начинаем построение запроса
+
     query = db.query(Cart)
     
-    # Фильтр по минимальной цене
-    if min_price != None:
-        query = query.filter(Cart.price >= min_price)
+    # Создаем подзапросы для цены и количества
+    cart_stats_subquery = (
+        db.query(
+            CartItem.cart_id,
+            func.sum(CartItem.quantity * Item.price).label('total_price'),
+            func.sum(CartItem.quantity).label('total_quantity')
+        )
+        .join(Item, CartItem.item_id == Item.id)
+        .group_by(CartItem.cart_id)
+        .subquery()
+    )
     
-    # Фильтр по максимальной цене
-    if max_price != None:
-        query = query.filter(Cart.price <= max_price)
+    # Присоединяем подзапрос к основному запросу
+    query = query.join(cart_stats_subquery, Cart.id == cart_stats_subquery.c.cart_id)
     
-    # Фильтр по минимальному количеству товаров
-    if min_quantity != None:
-        query = query.filter(Cart.quantity >= min_quantity)
+    # Фильтрация по цене
+    if min_price is not None:
+        query = query.filter(cart_stats_subquery.c.total_price >= min_price)
     
-    # Фильтр по максимальному количеству товаров
-    if max_quantity != None:
-        query = query.filter(Cart.quantity <= max_quantity)
+    if max_price is not None:
+        query = query.filter(cart_stats_subquery.c.total_price <= max_price)
+    
+    # Фильтрация по количеству
+    if min_quantity is not None:
+        query = query.filter(cart_stats_subquery.c.total_quantity >= min_quantity)
+    
+    if max_quantity is not None:
+        query = query.filter(cart_stats_subquery.c.total_quantity <= max_quantity)
     
     # Применяем пагинацию
-    items = query.offset(offset).limit(limit).all()
+    carts = query.order_by(Cart.id).offset(offset).limit(limit).all()
     
-    return items
+    return carts
 
 
 

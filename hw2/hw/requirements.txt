@@ -10,3 +10,6 @@ Faker>=37.8.0
 sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
 python-dotenv==1.0.0
+pytest-cov
+pytest-mock
+pytest
