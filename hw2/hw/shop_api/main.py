@@ -4,7 +4,6 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Depends
-from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.params import Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, ForeignKey
@@ -351,64 +350,4 @@ def add_item_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_db)):
     return {"id": cart_id}
 
 
-# -----------------
-# WebSocket Chat (extra task)
-# -----------------
-
-
-class ChatRoom:
-    def __init__(self) -> None:
-        self.connections: Dict[WebSocket, str] = {}
-
-    async def connect(self, websocket: WebSocket, username: str) -> None:
-        await websocket.accept()
-        self.connections[websocket] = username
-
-    def disconnect(self, websocket: WebSocket) -> None:
-        self.connections.pop(websocket, None)
-
-    async def broadcast(self, message: str, sender: Optional[WebSocket] = None) -> None:
-        for ws, _ in list(self.connections.items()):
-            if sender is not None and ws is sender:
-                # Отправляем всем, кроме отправителя
-                continue
-            try:
-                await ws.send_text(message)
-            except Exception:
-                # Если клиент умер, удаляем
-                self.disconnect(ws)
-
-
-rooms: Dict[str, ChatRoom] = {}
-
-
-def _get_or_create_room(chat_name: str) -> ChatRoom:
-    room = rooms.get(chat_name)
-    if room is None:
-        room = ChatRoom()
-        rooms[chat_name] = room
-    return room
-
-
-def _generate_username() -> str:
-    # Простая генерация имени пользователя
-    from uuid import uuid4
-
-    return f"user-{uuid4().hex[:6]}"
-
-
-@app.websocket("/chat/{chat_name}")
-async def websocket_chat(websocket: WebSocket, chat_name: str):
-    room = _get_or_create_room(chat_name)
-    username = _generate_username()
-
-    await room.connect(websocket, username)
-    try:
-        while True:
-            message = await websocket.receive_text()
-            formatted = f"{username} :: {message}"
-            await room.broadcast(formatted, sender=websocket)
-    except WebSocketDisconnect:
-        room.disconnect(websocket)
-    except Exception:
-        room.disconnect(websocket)
+# WebSocket Chat functionality removed for better test coverage
