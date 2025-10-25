@@ -1,0 +1,25 @@
+[run]  # Настройки запуска coverage
+source = shop_api              # Измерять покрытие только для папки shop_api
+omit =                         # Исключить из анализа:
+    */tests/*                  #   - тестовые файлы
+    */test_*.py               #   - файлы тестов
+    */__pycache__/*           #   - кэш Python
+    */venv/*                  #   - виртуальное окружение
+    */.venv/*
+
+[report]  # Настройки отчетов
+precision = 2                  # Показывать 2 знака после запятой (98.67%)
+show_missing = True            # Показывать непокрытые строки кода
+skip_covered = False           # Не скрывать полностью покрытые файлы
+
+exclude_lines =                # Не считать эти строки непокрытыми:
+    pragma: no cover           #   - строки с комментарием "pragma: no cover"
+    def __repr__              #   - методы __repr__
+    raise AssertionError      #   - строки с AssertionError
+    raise NotImplementedError #   - строки с NotImplementedError
+    if __name__ == .__main__.: #   - блоки if __name__ == "__main__"
+    if TYPE_CHECKING:         #   - блоки для type hints
+    @abstractmethod           #   - абстрактные методы
+
+[html]  # Настройки HTML-отчета
+directory = htmlcov            # Папка для HTML-отчета

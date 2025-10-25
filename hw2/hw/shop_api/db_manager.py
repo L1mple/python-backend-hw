@@ -190,7 +190,7 @@ class DB:
             """), {"item_id": item_id}).fetchone()
             
             if not cart_check or not item_check:
-                raise NotFoundError(detail="Корзина и/или товар не найдены")
+                raise NotFoundError("Корзина и/или товар не найдены")
             
             # Проверяем, есть ли уже этот товар в корзине
             existing_item = session.execute(text("""
