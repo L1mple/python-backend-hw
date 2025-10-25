@@ -10,3 +10,13 @@ Faker>=37.8.0
 
 # Зависимости для мониторинга
 prometheus-fastapi-instrumentator
+
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+python-dotenv==1.0.0
+
+asyncpg==0.29.0
+pytest-cov
+pytest-mock
+responses
+faker

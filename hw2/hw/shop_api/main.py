@@ -1,8 +1,13 @@
 from typing import Dict, Optional
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+from dao import get_db
+from models import Item, Cart, CartItem
 
 app = FastAPI(title="Shop API")
 
@@ -24,81 +29,13 @@ class PutItemDTO(BaseModel):
     deleted: Optional[bool] = False
 
 
-class Item:
-    def __init__(self, id: int, name: str, price: float):
-        self.id: int = id
-        self.name: str = name
-        self.deleted: bool = False
-        self.price:float = price
-    
-    def to_json(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "deleted": self.deleted,
-            "price": self.price
-        }
-    
-    def delete(self):
-        self.deleted = True
-
-
-class CartItem:
-    def __init__(self, item: Item, quantity: int):
-        self.id: int = item.id
-        self.name: str = item.name
-        self.quantity: int = quantity
-        self.available: bool = not item.deleted
-        self.price: float = item.price
-    
-    def add(self, quantity: int = 1):
-        self.quantity += quantity
-    
-    def get_total_price(self):
-        return self.price * self.quantity
-
-    def to_json(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "quantity": self.quantity,
-            "available": self.available
-        }
-
-class Cart:
-    def __init__(self, id: int):
-        self.id: int = id
-        self.items: Dict[int, CartItem] = {}
-
-    def add_item(self, item: Item, quantity: int = 1):
-        if item.id in self.items:
-            self.items[item.id].add(quantity)
-        else:
-            self.items[item.id] = CartItem(item, quantity)
-    
-    def get_total_price(self):
-        return sum(item.get_total_price() for item in self.items.values())
-    
-    def get_all_quantity(self):
-        return sum(item.quantity for item in self.items.values())
-
-    def to_json(self):
-        return {
-            "id": self.id,
-            "items": [item.to_json() for item in self.items.values()],
-            "price": self.get_total_price()
-        }
-
-
-
-carts: Dict[int, Cart] = {}
-items: Dict[int, Item] = {}
-
 
 @app.post("/cart", status_code=201)
-async def create_cart():
-    cart = Cart(id=len(carts) + 1)
-    carts[cart.id] = cart
+async def create_cart(db: AsyncSession = Depends(get_db)):
+    cart = Cart()
+    db.add(cart)
+    await db.commit()
+    await db.refresh(cart)
     return JSONResponse(
         status_code=201,
         content={"id": cart.id},
@@ -107,8 +44,13 @@ async def create_cart():
 
 
 @app.get("/cart/{id}")
-async def get_cart(id: int):
-    cart = carts.get(id)
+async def get_cart(id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Cart).options(
+            selectinload(Cart.cart_items).selectinload(CartItem.item)
+        ).where(Cart.id == id)
+    )
+    cart = result.scalar_one_or_none()
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart not found")
     return JSONResponse(
@@ -125,34 +67,60 @@ async def list_carts(
     max_price: Optional[float] = Query(None, ge=0.0),
     min_quantity: Optional[int] = Query(None, ge=0),
     max_quantity: Optional[int] = Query(None, ge=0),
+    db: AsyncSession = Depends(get_db),
 ):
-    filtered = filter(
-        lambda cart: (min_price is None or cart.get_total_price() >= min_price) and
-                     (max_price is None or cart.get_total_price() <= max_price) and
-                     (min_quantity is None or cart.get_all_quantity() >= min_quantity) and
-                     (max_quantity is None or cart.get_all_quantity() <= max_quantity),
-        carts.values()
+    result = await db.execute(
+        select(Cart).options(selectinload(Cart.cart_items).selectinload(CartItem.item))
     )
-    result = list(filtered)[offset:offset + limit]
-    return [cart.to_json() for cart in result]
+    carts_all = result.scalars().all()
+
+    def valid_cart(cart: Cart) -> bool:
+        price = sum(ci.get_total_price() for ci in getattr(cart, "cart_items", []))
+        qty = sum((ci.quantity or 0) for ci in getattr(cart, "cart_items", []))
+        return (
+            (min_price is None or price >= min_price) and
+            (max_price is None or price <= max_price) and
+            (min_quantity is None or qty >= min_quantity) and
+            (max_quantity is None or qty <= max_quantity)
+        )
+
+    filtered = [c for c in carts_all if valid_cart(c)]
+    sliced = filtered[offset: offset + limit]
+    return [c.to_json() for c in sliced]
 
 
 @app.post("/cart/{cart_id}/add/{item_id}")
-async def add_item_to_cart(cart_id: int, item_id: int):
-    cart = carts.get(cart_id)
+async def add_item_to_cart(cart_id: int, item_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Cart).where(Cart.id == cart_id))
+    cart = result.scalar_one_or_none()
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart not found")
-    item = items.get(item_id)
+
+    result = await db.execute(select(Item).where(Item.id == item_id))
+    item = result.scalar_one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    cart.add_item(item)
+
+    result = await db.execute(
+        select(CartItem).where(CartItem.cart_id == cart.id, CartItem.item_id == item.id)
+    )
+    cart_item = result.scalar_one_or_none()
+    if cart_item:
+        cart_item.quantity += 1
+    else:
+        cart_item = CartItem(cart_id=cart.id, item_id=item.id, quantity=1)
+        db.add(cart_item)
+
+    await db.commit()
     return {"message": "Item added to cart"}
 
 
 @app.post("/item", status_code=201)
-async def create_item(item_dto: ItemDTO):
-    item = Item(id=len(items) + 1, name=item_dto.name, price=item_dto.price)
-    items[item.id] = item
+async def create_item(item_dto: ItemDTO, db: AsyncSession = Depends(get_db)):
+    item = Item(name=item_dto.name, price=item_dto.price)
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
     return JSONResponse(
         status_code=201,
         content=item.to_json(),
@@ -160,10 +128,12 @@ async def create_item(item_dto: ItemDTO):
     )
 
 
+
 @app.get("/item/{id}")
-async def get_item(id: int):
-    item = items.get(id)
-    if item is None or item.deleted:
+async def get_item(id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Item).where(Item.id == id))
+    item = result.scalar_one_or_none()
+    if not item or item.deleted:
         raise HTTPException(status_code=404, detail="Item not found")
     return JSONResponse(
         status_code=200,
@@ -179,26 +149,34 @@ async def list_items(
     min_price: Optional[float] = Query(None, ge=0.0),
     max_price: Optional[float] = Query(None, ge=0.0),
     show_deleted: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
 ):
-    filtered = filter(
-        lambda item: (min_price is None or item.price >= min_price) and
-                     (max_price is None or item.price <= max_price) and
-                     (show_deleted or not item.deleted),
-        items.values()
-    )
-    result = list(filtered)[offset:offset + limit]
-    return  [item.to_json() for item in result]
+    q = select(Item)
+    if not show_deleted:
+        q = q.where(Item.deleted == False)
+    if min_price is not None:
+        q = q.where(Item.price >= min_price)
+    if max_price is not None:
+        q = q.where(Item.price <= max_price)
+    q = q.offset(offset).limit(limit)
+    result = await db.execute(q)
+    items_list = result.scalars().all()
+    return [it.to_json() for it in items_list]
 
 
 @app.put("/item/{id}")
-async def recreate_item(id: int, item_dto: PutItemDTO):
-    item = items.get(id)
+async def recreate_item(id: int, item_dto: PutItemDTO, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Item).where(Item.id == id))
+    item = result.scalar_one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    
+
     item.name = item_dto.name
     item.price = item_dto.price
     item.deleted = item_dto.deleted or False
+
+    await db.commit()
+    await db.refresh(item)
     
     return JSONResponse(
         status_code=200,
@@ -208,8 +186,9 @@ async def recreate_item(id: int, item_dto: PutItemDTO):
 
 
 @app.patch("/item/{id}")
-async def update_item(id: int, item_dto: PatchItemDTO):
-    item = items.get(id)
+async def update_item(id: int, item_dto: PatchItemDTO, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Item).where(Item.id == id))
+    item = result.scalar_one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     if item.deleted:
@@ -218,16 +197,21 @@ async def update_item(id: int, item_dto: PatchItemDTO):
         item.name = item_dto.name
     if item_dto.price is not None:
         item.price = item_dto.price
+    await db.commit()
+    await db.refresh(item)
     return JSONResponse(
         status_code=200,
-        content=item.to_json(),
+        content={k: v for k, v in vars(item).items() if not k.startswith("_")},
         headers={"Location": f"/item/{item.id}"}
     )
 
+
 @app.delete("/item/{id}", status_code=200)
-async def delete_item(id: int):
-    item = items.get(id)
+async def delete_item(id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Item).where(Item.id == id))
+    item = result.scalar_one_or_none()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    item.delete()
+    item.deleted = True
+    await db.commit()
     return {"message": "Item deleted"}
