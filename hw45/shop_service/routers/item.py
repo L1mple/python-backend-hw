@@ -64,7 +64,7 @@ async def update_item(item_id: int, item_params: ItemRequest, db: Session = Depe
     item = item_service.get_item(item_id=item_id)
     
     if item is None:
-        return HTTPException(HTTPStatus.NOT_FOUND, "Item with specified id does not exists!")
+        return Response("Item with specified id does not exists!", status_code=HTTPStatus.NOT_FOUND)
 
     item.name = item_params.name
     item.price = item_params.price

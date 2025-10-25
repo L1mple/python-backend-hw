@@ -13,18 +13,3 @@ app.include_router(item_router)
 app.include_router(cart_router)
 
 Instrumentator().instrument(app).expose(app)
-
-
-@app.get("/", include_in_schema=False)
-async def docs_redirect():
-    return RedirectResponse(url="/docs", status_code=301)
-
-
-if __name__ == "main":
-    import uvicorn
-    
-    uvicorn.run(
-        app,
-        port=8080,
-        log_level="info",
-    )

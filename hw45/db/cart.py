@@ -108,10 +108,6 @@ class CartRepositoryInterface(ABC):
     @abstractmethod
     def update(self, cart: Cart) -> Cart:
         pass
-
-    @abstractmethod
-    def delete(self, cart_id: int) -> None:
-        pass
         
     @abstractmethod
     def get_all(self) -> List[Cart]:
@@ -129,13 +125,6 @@ class SqlAlchemyCartRepository(CartRepositoryInterface):
     def create(self, cart: Cart) -> Cart:
         orm_cart = CartMapper.to_orm(cart)
         self.session.add(orm_cart)
-        self.session.flush()
-        
-        # Сохраняем items корзины как отдельные строки в orders
-        for item in cart.items:
-            order = OrdersOrm(cart_id=orm_cart.id, item_id=item.id)
-            self.session.add(order)
-        
         self.session.commit()
         return CartMapper.to_domain(orm_cart)
 
@@ -159,14 +148,6 @@ class SqlAlchemyCartRepository(CartRepositoryInterface):
         self.session.commit()
         return CartMapper.to_domain(orm_cart)
 
-    def delete(self, cart_id: int) -> None:
-        orm_cart = self.session.query(CartOrm).filter_by(id=cart_id).first()
-        if not orm_cart:
-            raise ValueError(f"Cart with id {cart_id} not found")
-        
-        self.session.delete(orm_cart)
-        self.session.commit()
-
     def get_all(self):
         orm_carts = self.session.query(CartOrm).all()
         return [CartMapper.to_domain(orm_cart) for orm_cart in orm_carts]
@@ -184,10 +165,6 @@ class CartService:
         """Создание новой корзины"""
         cart = Cart()
         return self.cart_repo.create(cart)
-    
-    def is_cart_exists(self, cart_id: int):
-        cart = self.cart_repo.find_by_id(cart_id)
-        return False if cart is None else True
     
     def get_cart(self, cart_id: int):
         cart = self.cart_repo.find_by_id(cart_id)

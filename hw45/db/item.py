@@ -122,8 +122,6 @@ class SqlAlchemyItemRepository(ItemRepositoryInterface):
 
     def update(self, item: Item) -> Item:
         orm_item = self.session.query(ItemOrm).filter_by(id=item.id).first()
-        if not orm_item:
-           raise ValueError(f"Item with id {item.id} not found")
 
         ItemMapper.to_orm(item, orm_item)
         self.session.commit()
@@ -149,12 +147,6 @@ class ItemService:
 
     def create_item(self, name: str, price: int) -> Item:
         """Создание нового товара с валидацией"""
-        if not name:
-            raise ValueError("Item name cannot be empty")
-
-        if price < 0:
-            raise ValueError("Price cannot be negative")
-
         item = Item(name=name, price=price)
         return self.item_repo.create(item)
     

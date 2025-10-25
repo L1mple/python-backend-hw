@@ -34,7 +34,7 @@ async def get_cart(cart_id: int, db: Session = Depends(get_db)):
     cart = cart_service.get_cart(cart_id)
     
     if cart is None:
-        return HTTPException(HTTPStatus.NOT_FOUND, "Cart not found!")
+        return Response("Cart not found!", status_code=HTTPStatus.NOT_FOUND)
 
     return cart
 
@@ -77,6 +77,6 @@ async def add_item2cart(cart_id: int, item_id: int, db: Session = Depends(get_db
     try:
         cart_service.add_item_to_cart(cart_id=cart_id, item_id=item_id, count=1)
     except ValueError as e:
-        return HTTPException(HTTPStatus.NOT_FOUND, str(e))
+        return Response(str(e), status_code=HTTPStatus.NOT_FOUND)
     
     return Response(status_code=HTTPStatus.OK)

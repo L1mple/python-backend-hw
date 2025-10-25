@@ -7,7 +7,7 @@ class ElementId(BaseModel):
 
 class ItemRequest(BaseModel):
     name: str
-    price: float
+    price: float = Field(gt=0)
 
 
 class PatchItemRequest(BaseModel):

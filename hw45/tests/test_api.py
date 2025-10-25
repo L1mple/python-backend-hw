@@ -47,6 +47,28 @@ def existing_not_empty_carts(existing_items: list[int]) -> list[int]:
     return carts
 
 
+def test_add_not_exist_item_to_cart(
+    existing_empty_cart_id: int,
+) -> None:
+    cart_id = existing_empty_cart_id
+    not_exist_item_id = 3189471973291
+
+    response = client.post(f"/cart/{cart_id}/add/{not_exist_item_id}")
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    
+    
+def test_add_item_to_not_exist_cart(
+    existing_items: list[int],
+) -> None:
+    not_exist_cart_id = 3189471973291
+    item_id = faker.random_element(existing_items)
+
+    response = client.post(f"/cart/{not_exist_cart_id}/add/{item_id}")
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
 @pytest.fixture()
 def existing_not_empty_cart_id(
     existing_empty_cart_id: int,
@@ -116,6 +138,12 @@ def test_get_cart(request, cart: int, not_empty: bool) -> None:
         assert response_json["price"] == 0.0
 
 
+def test_get_not_exist_cart() -> None:
+    cart_id = 3189471973291
+    response = client.get(f"/cart/{cart_id}")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+  
 @pytest.mark.parametrize(
     ("query", "status_code"),
     [
@@ -177,6 +205,13 @@ def test_get_item(existing_item: dict[str, Any]) -> None:
 
     assert response.status_code == HTTPStatus.OK
     assert response.json() == existing_item
+    
+
+def test_get_not_exist_item() -> None:
+    item_id = 3189471973291
+    response = client.get(f"/item/{item_id}")
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.parametrize(
@@ -235,6 +270,13 @@ def test_put_item(
         new_item = existing_item.copy()
         new_item.update(body)
         assert response.json() == new_item
+        
+
+def test_put_not_exist_item() -> None:
+    item_id = 3189471973291
+    response = client.put(f"/item/{item_id}", json={"name": "new name", "price": 9.99})
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.parametrize(
