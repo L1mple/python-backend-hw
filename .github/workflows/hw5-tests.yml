@@ -1,6 +1,5 @@
-name: "HW2 Tests"
+name: "HW5 Tests with Coverage"
 
-# Запускаем тесты при изменении файлов в hw2/hw/
 on:
   pull_request:
     branches: [ main ]
@@ -10,7 +9,7 @@ on:
     paths: [ 'hw2/hw/**' ]
 
 jobs:
-  test-hw2:
+  test-hw5:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -25,7 +24,6 @@ jobs:
           POSTGRES_DB: shop_db
         ports:
           - 5432:5432
-        # Проверка, что БД готова к подключениям
         options: >-
           --health-cmd "pg_isready -U shop_user -d shop_db"
           --health-interval 10s
@@ -57,10 +55,18 @@ jobs:
           sleep 2
         done
 
-    - name: Run tests
+    - name: Run tests and save coverage
       working-directory: hw2/hw
       env:
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
         DATABASE_URL: ${{ env.DATABASE_URL }}
       run: |
-        pytest test_homework2.py -v
+        pytest --junitxml=pytest.xml --cov-report=term-missing:skip-covered \
+              --cov=shop_api test_homework2.py | tee pytest-coverage.txt
+
+    - name: Post coverage comment
+      uses: MishaKav/pytest-coverage-comment@main
+      with:
+        pytest-coverage-path: hw2/hw/pytest-coverage.txt
+        junitxml-path: hw2/hw/pytest.xml
+        github-token: ${{ secrets.GITHUB_TOKEN }}
