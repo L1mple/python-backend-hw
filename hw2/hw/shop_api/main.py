@@ -13,7 +13,7 @@ conn: asyncpg.Connection | None = None
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS item (
   id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
   price REAL NOT NULL,
   deleted INTEGER NOT NULL DEFAULT 0
 );
@@ -23,15 +23,12 @@ CREATE TABLE IF NOT EXISTS cart (
 );
 
 CREATE TABLE IF NOT EXISTS cart_item (
-  cart_id INTEGER NOT NULL,
-  item_id INTEGER NOT NULL,
+  cart_id INTEGER NOT NULL REFERENCES cart(id),
+  item_id INTEGER NOT NULL REFERENCES item(id),
   quantity INTEGER NOT NULL DEFAULT 1,
-  PRIMARY KEY (cart_id, item_id),
-  FOREIGN KEY (cart_id) REFERENCES cart(id) ON DELETE CASCADE,
-  FOREIGN KEY (item_id) REFERENCES item(id) ON DELETE CASCADE
+  PRIMARY KEY (cart_id, item_id)
 );
 """
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

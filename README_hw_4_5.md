@@ -1,0 +1,1 @@
+python -m pytest -vv --cov=hw2\hw\shop_api hw2/tests
