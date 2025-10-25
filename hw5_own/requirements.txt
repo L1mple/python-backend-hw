@@ -1,6 +1,8 @@
 # Основные зависимости для ASGI приложения
 fastapi>=0.117.1
 uvicorn>=0.24.0
+websockets>=15.0.1
+prometheus_fastapi_instrumentator>=7.1.0
 
 # Зависимости для тестирования
 pytest>=7.4.0
