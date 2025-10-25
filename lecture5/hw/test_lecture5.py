@@ -475,5 +475,87 @@ def test_additional_coverage():
     assert response.status_code == 200
 
 
+def test_websocket_functions_coverage():
+    """Тесты для покрытия WebSocket функций."""
+    
+    # Тест _generate_username
+    from shop_api.main import _generate_username
+    username1 = _generate_username()
+    username2 = _generate_username()
+    assert username1 != username2
+    assert username1.startswith("user-")
+    assert username2.startswith("user-")
+    
+    # Тест _get_or_create_room
+    from shop_api.main import _get_or_create_room
+    room1 = _get_or_create_room("test_room")
+    room2 = _get_or_create_room("test_room")
+    assert room1 is room2  # Должна быть одна и та же комната
+    
+    # Тест ChatRoom
+    from shop_api.main import ChatRoom
+    room = ChatRoom()
+    assert room.connections == {}
+    
+    # Тест broadcast_message
+    from shop_api.main import broadcast_message
+    # Это не должно вызывать ошибку
+    broadcast_message("test_room", "test message")
+
+
+def test_error_handling_coverage():
+    """Тесты для покрытия обработки ошибок."""
+    
+    # Тест несуществующего товара
+    response = client.get("/item/99999")
+    assert response.status_code == 404
+    
+    # Тест несуществующей корзины
+    response = client.get("/cart/99999")
+    assert response.status_code == 404
+    
+    # Тест добавления несуществующего товара в корзину
+    response = client.post("/cart")
+    cart_id = response.json()["id"]
+    
+    response = client.post(f"/cart/{cart_id}/add/99999")
+    assert response.status_code == 404
+    
+    # Тест обновления несуществующего товара
+    response = client.put("/item/99999", json={"name": "test", "price": 100.0})
+    assert response.status_code == 404
+    
+    # Тест частичного обновления несуществующего товара
+    response = client.patch("/item/99999", json={"price": 100.0})
+    assert response.status_code == 404
+    
+    # Тест удаления несуществующего товара
+    response = client.delete("/item/99999")
+    assert response.status_code == 404
+
+
+def test_validation_coverage():
+    """Тесты для покрытия валидации."""
+    
+    # Тест невалидного JSON в create_item
+    response = client.post("/item", json={"name": 123, "price": "invalid"})
+    assert response.status_code == 422
+    
+    # Тест невалидного JSON в replace_item
+    response = client.post("/item", json={"name": "test", "price": 100.0})
+    item_id = response.json()["id"]
+    
+    response = client.put(f"/item/{item_id}", json={"name": 123, "price": "invalid"})
+    assert response.status_code == 422
+    
+    # Тест невалидного JSON в patch_item
+    response = client.patch(f"/item/{item_id}", json={"price": "invalid"})
+    assert response.status_code == 422
+    
+    # Тест попытки изменить deleted в patch_item
+    response = client.patch(f"/item/{item_id}", json={"deleted": True})
+    assert response.status_code == 422
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--cov=hw2.hw.shop_api", "--cov-report=html"])
