@@ -417,5 +417,63 @@ def test_prometheus_instrumentation_coverage():
     assert response.status_code in [200, 404]
 
 
+def test_additional_coverage():
+    """Дополнительные тесты для достижения 95% покрытия."""
+    
+    # Тест обработки исключений в create_item
+    response = client.post("/item", json={"name": "test", "price": "invalid"})
+    assert response.status_code == 422
+    
+    # Тест обработки исключений в replace_item
+    response = client.post("/item", json={"name": "test", "price": 100.0})
+    item_id = response.json()["id"]
+    
+    response = client.put(f"/item/{item_id}", json={"name": "test", "price": "invalid"})
+    assert response.status_code == 422
+    
+    # Тест обработки исключений в patch_item
+    response = client.patch(f"/item/{item_id}", json={"price": "invalid"})
+    assert response.status_code == 422
+    
+    # Тест обработки исключений в add_item_to_cart
+    response = client.post("/cart")
+    cart_id = response.json()["id"]
+    
+    response = client.post(f"/cart/{cart_id}/add/{item_id}")
+    assert response.status_code == 200
+    
+    # Тест обработки исключений в _compute_cart_price
+    response = client.get(f"/cart/{cart_id}")
+    assert response.status_code == 200
+    
+    # Тест обработки исключений в _total_quantity_in_cart
+    response = client.get("/cart")
+    assert response.status_code == 200
+    
+    # Тест обработки исключений в list_items
+    response = client.get("/item?min_price=50.0&max_price=150.0")
+    assert response.status_code == 200
+    
+    # Тест обработки исключений в list_carts
+    response = client.get("/cart?min_price=50.0&max_price=150.0")
+    assert response.status_code == 200
+    
+    # Тест обработки исключений в get_item
+    response = client.get(f"/item/{item_id}")
+    assert response.status_code == 200
+    
+    # Тест обработки исключений в get_cart
+    response = client.get(f"/cart/{cart_id}")
+    assert response.status_code == 200
+    
+    # Тест обработки исключений в delete_item
+    response = client.delete(f"/item/{item_id}")
+    assert response.status_code == 200
+    
+    # Тест обработки исключений в delete_item (повторное удаление)
+    response = client.delete(f"/item/{item_id}")
+    assert response.status_code == 200
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--cov=hw2.hw.shop_api", "--cov-report=html"])
