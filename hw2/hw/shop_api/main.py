@@ -1,84 +1,141 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.params import Query
 from fastapi.responses import JSONResponse
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, ForeignKey
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import sessionmaker, Session, relationship
 
 try:
+    # Экспорт метрик Prometheus на /metrics
     from prometheus_fastapi_instrumentator import Instrumentator
-except Exception:  
-    Instrumentator = None  
+except Exception:  # pragma: no cover
+    Instrumentator = None  # type: ignore
+
+# SQLAlchemy setup
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./shop.db")
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+
+# SQLAlchemy models
+class Item(Base):
+    __tablename__ = "items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    price = Column(Float, nullable=False)
+    deleted = Column(Boolean, default=False)
+
+
+class Cart(Base):
+    __tablename__ = "carts"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    items = relationship("CartItem", back_populates="cart")
+
+
+class CartItem(Base):
+    __tablename__ = "cart_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    cart_id = Column(Integer, ForeignKey("carts.id"), nullable=False)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    quantity = Column(Integer, default=1)
+    
+    cart = relationship("Cart", back_populates="items")
+    item = relationship("Item")
+
+
+# Create tables
+Base.metadata.create_all(bind=engine)
+
+
 app = FastAPI(title="Shop API")
+
+# Инициализируем /metrics, если доступна библиотека
 if Instrumentator is not None:
     Instrumentator().instrument(app).expose(app)
-items_storage: Dict[int, Dict[str, Any]] = {}
-carts_storage: Dict[int, Dict[str, Any]] = {}
-_next_item_id: int = 1
-_next_cart_id: int = 1
 
-def _generate_item_id() -> int:
-    global _next_item_id
-    item_id = _next_item_id
-    _next_item_id += 1
-    return item_id
 
-def _generate_cart_id() -> int:
-    global _next_cart_id
-    cart_id = _next_cart_id
-    _next_cart_id += 1
-    return cart_id
+def get_db() -> Session:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-def _get_item_or_404(item_id: int) -> Dict[str, Any]:
-    item = items_storage.get(item_id)
-    if item is None or item.get("deleted") is True:
+
+def _get_item_or_404(db: Session, item_id: int) -> Item:
+    item = db.query(Item).filter(Item.id == item_id, Item.deleted == False).first()
+    if item is None:
         raise HTTPException(status_code=404)
     return item
 
-def _compute_cart_price(cart: Dict[str, Any]) -> float:
+
+def _compute_cart_price(db: Session, cart: Cart) -> float:
     total_price = 0.0
-    for entry in cart["items"]:
-        item_id = entry["id"]
-        quantity = entry["quantity"]
-        item = items_storage.get(item_id)
-        if item is None or item.get("deleted") is True:
-            continue
-        total_price += float(item["price"]) * int(quantity)
+    for cart_item in cart.items:
+        item = db.query(Item).filter(Item.id == cart_item.item_id, Item.deleted == False).first()
+        if item is not None:
+            total_price += float(item.price) * int(cart_item.quantity)
     return float(total_price)
 
-def _total_quantity_in_cart(cart: Dict[str, Any]) -> int:
-    return int(sum(entry["quantity"] for entry in cart["items"]))
 
-# --------------
+def _total_quantity_in_cart(cart: Cart) -> int:
+    return int(sum(cart_item.quantity for cart_item in cart.items))
+
+
+# -----------------
 # Item endpoints
-# --------------
+# -----------------
+
 
 @app.post("/item")
-def create_item(body: Dict[str, Any]):
+def create_item(body: Dict[str, Any], db: Session = Depends(get_db)):
     if not isinstance(body, dict):
         raise HTTPException(status_code=422)
 
     if "name" not in body or "price" not in body:
         raise HTTPException(status_code=422)
 
-    item_id = _generate_item_id()
-    item = {
-        "id": item_id,
-        "name": body["name"],
-        "price": float(body["price"]),
-        "deleted": False,
-    }
-    items_storage[item_id] = item
+    try:
+        item = Item(
+            name=body["name"],
+            price=float(body["price"]),
+            deleted=False,
+        )
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422)
+    db.add(item)
+    db.commit()
+    db.refresh(item)
 
-    response = JSONResponse(status_code=201, content=item)
+    response = JSONResponse(status_code=201, content={
+        "id": item.id,
+        "name": item.name,
+        "price": item.price,
+        "deleted": item.deleted,
+    })
     return response
 
+
 @app.get("/item/{item_id}")
-def get_item(item_id: int):
-    item = _get_item_or_404(item_id)
-    return item
+def get_item(item_id: int, db: Session = Depends(get_db)):
+    item = _get_item_or_404(db, item_id)
+    return {
+        "id": item.id,
+        "name": item.name,
+        "price": item.price,
+        "deleted": item.deleted,
+    }
+
 
 @app.get("/item")
 def list_items(
@@ -87,42 +144,60 @@ def list_items(
     min_price: Optional[float] = Query(default=None, ge=0.0),
     max_price: Optional[float] = Query(default=None, ge=0.0),
     show_deleted: bool = Query(default=False),
+    db: Session = Depends(get_db),
 ):
-    items: List[Dict[str, Any]] = list(items_storage.values())
-
+    query = db.query(Item)
+    
     if not show_deleted:
-        items = [it for it in items if it.get("deleted") is False]
-
+        query = query.filter(Item.deleted == False)
+    
     if min_price is not None:
-        items = [it for it in items if float(it["price"]) >= float(min_price)]
+        query = query.filter(Item.price >= float(min_price))
     if max_price is not None:
-        items = [it for it in items if float(it["price"]) <= float(max_price)]
+        query = query.filter(Item.price <= float(max_price))
+    
+    items = query.offset(offset).limit(limit).all()
+    
+    return [
+        {
+            "id": item.id,
+            "name": item.name,
+            "price": item.price,
+            "deleted": item.deleted,
+        }
+        for item in items
+    ]
 
-    items = items[offset : offset + limit]
-    return items
 
 @app.put("/item/{item_id}")
-def replace_item(item_id: int, body: Dict[str, Any]):
-    existing = items_storage.get(item_id)
+def replace_item(item_id: int, body: Dict[str, Any], db: Session = Depends(get_db)):
+    existing = db.query(Item).filter(Item.id == item_id).first()
     if existing is None:
         raise HTTPException(status_code=404)
 
     if not isinstance(body, dict) or "name" not in body or "price" not in body:
         raise HTTPException(status_code=422)
 
-    existing.update({
-        "name": body["name"],
-        "price": float(body["price"]),
-    })
-    return existing
+    existing.name = body["name"]
+    existing.price = float(body["price"])
+    db.commit()
+    db.refresh(existing)
+    
+    return {
+        "id": existing.id,
+        "name": existing.name,
+        "price": existing.price,
+        "deleted": existing.deleted,
+    }
+
 
 @app.patch("/item/{item_id}")
-def patch_item(item_id: int, body: Dict[str, Any]):
-    existing = items_storage.get(item_id)
+def patch_item(item_id: int, body: Dict[str, Any], db: Session = Depends(get_db)):
+    existing = db.query(Item).filter(Item.id == item_id).first()
     if existing is None:
         raise HTTPException(status_code=404)
 
-    if existing.get("deleted") is True:
+    if existing.deleted is True:
         return JSONResponse(status_code=304, content=None)
 
     if not isinstance(body, dict):
@@ -135,47 +210,68 @@ def patch_item(item_id: int, body: Dict[str, Any]):
         raise HTTPException(status_code=422)
 
     if "name" in body:
-        existing["name"] = body["name"]
+        existing.name = body["name"]
     if "price" in body:
-        existing["price"] = float(body["price"])
+        existing.price = float(body["price"])
+    
+    db.commit()
+    db.refresh(existing)
+    
+    return {
+        "id": existing.id,
+        "name": existing.name,
+        "price": existing.price,
+        "deleted": existing.deleted,
+    }
 
-    return existing
 
 @app.delete("/item/{item_id}")
-def delete_item(item_id: int):
-    existing = items_storage.get(item_id)
+def delete_item(item_id: int, db: Session = Depends(get_db)):
+    existing = db.query(Item).filter(Item.id == item_id).first()
     if existing is None:
         return {"status": "ok"}
 
-    existing["deleted"] = True
+    existing.deleted = True
+    db.commit()
     return {"status": "ok"}
 
-# --------------
+
+# -----------------
 # Cart endpoints
-# --------------
+# -----------------
+
 
 @app.post("/cart")
-def create_cart():
-    cart_id = _generate_cart_id()
-    cart = {"id": cart_id, "items": []}  
-    carts_storage[cart_id] = cart
+def create_cart(db: Session = Depends(get_db)):
+    cart = Cart()
+    db.add(cart)
+    db.commit()
+    db.refresh(cart)
 
-    response = JSONResponse(status_code=201, content={"id": cart_id})
-    response.headers["Location"] = f"/cart/{cart_id}"
+    response = JSONResponse(status_code=201, content={"id": cart.id})
+    response.headers["Location"] = f"/cart/{cart.id}"
     return response
 
+
 @app.get("/cart/{cart_id}")
-def get_cart(cart_id: int):
-    cart = carts_storage.get(cart_id)
+def get_cart(cart_id: int, db: Session = Depends(get_db)):
+    cart = db.query(Cart).filter(Cart.id == cart_id).first()
     if cart is None:
         raise HTTPException(status_code=404)
 
     result = {
-        "id": cart["id"],
-        "items": cart["items"],
-        "price": _compute_cart_price(cart),
+        "id": cart.id,
+        "items": [
+            {
+                "id": cart_item.item_id,
+                "quantity": cart_item.quantity,
+            }
+            for cart_item in cart.items
+        ],
+        "price": _compute_cart_price(db, cart),
     }
     return result
+
 
 @app.get("/cart")
 def list_carts(
@@ -185,49 +281,74 @@ def list_carts(
     max_price: Optional[float] = Query(default=None, ge=0.0),
     min_quantity: Optional[int] = Query(default=None, ge=0),
     max_quantity: Optional[int] = Query(default=None, ge=0),
+    db: Session = Depends(get_db),
 ):
-    carts: List[Dict[str, Any]] = list(carts_storage.values())
+    carts = db.query(Cart).offset(offset).limit(limit).all()
 
-    if min_price is not None:
-        carts = [c for c in carts if _compute_cart_price(c) >= float(min_price)]
-    if max_price is not None:
-        carts = [c for c in carts if _compute_cart_price(c) <= float(max_price)]
-
-    if min_quantity is not None:
-        carts = [c for c in carts if _total_quantity_in_cart(c) >= int(min_quantity)]
-    if max_quantity is not None:
-        carts = [c for c in carts if _total_quantity_in_cart(c) <= int(max_quantity)]
-
-    carts = carts[offset : offset + limit]
+    # Apply filters
+    filtered_carts = []
+    for cart in carts:
+        price = _compute_cart_price(db, cart)
+        quantity = _total_quantity_in_cart(cart)
+        
+        if min_price is not None and price < float(min_price):
+            continue
+        if max_price is not None and price > float(max_price):
+            continue
+        if min_quantity is not None and quantity < int(min_quantity):
+            continue
+        if max_quantity is not None and quantity > int(max_quantity):
+            continue
+            
+        filtered_carts.append(cart)
 
     result = [
-        {"id": c["id"], "items": c["items"], "price": _compute_cart_price(c)}
-        for c in carts
+        {
+            "id": cart.id,
+            "items": [
+                {
+                    "id": cart_item.item_id,
+                    "quantity": cart_item.quantity,
+                }
+                for cart_item in cart.items
+            ],
+            "price": _compute_cart_price(db, cart),
+        }
+        for cart in filtered_carts
     ]
     return result
 
+
 @app.post("/cart/{cart_id}/add/{item_id}")
-def add_item_to_cart(cart_id: int, item_id: int):
-    cart = carts_storage.get(cart_id)
+def add_item_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_db)):
+    cart = db.query(Cart).filter(Cart.id == cart_id).first()
     if cart is None:
         raise HTTPException(status_code=404)
 
-    item = items_storage.get(item_id)
-    if item is None or item.get("deleted") is True:
+    item = db.query(Item).filter(Item.id == item_id, Item.deleted == False).first()
+    if item is None:
         raise HTTPException(status_code=404)
 
-    for entry in cart["items"]:
-        if entry["id"] == item_id:
-            entry["quantity"] = int(entry["quantity"]) + 1
-            break
+    # Check if item already in cart
+    existing_cart_item = db.query(CartItem).filter(
+        CartItem.cart_id == cart_id,
+        CartItem.item_id == item_id
+    ).first()
+    
+    if existing_cart_item:
+        existing_cart_item.quantity += 1
     else:
-        cart["items"].append({"id": item_id, "quantity": 1})
-
+        cart_item = CartItem(cart_id=cart_id, item_id=item_id, quantity=1)
+        db.add(cart_item)
+    
+    db.commit()
     return {"id": cart_id}
 
-# --------------
-# WebSocket Chat 
-# --------------
+
+# -----------------
+# WebSocket Chat (extra task)
+# -----------------
+
 
 class ChatRoom:
     def __init__(self) -> None:
@@ -243,13 +364,17 @@ class ChatRoom:
     async def broadcast(self, message: str, sender: Optional[WebSocket] = None) -> None:
         for ws, _ in list(self.connections.items()):
             if sender is not None and ws is sender:
+                # Отправляем всем, кроме отправителя
                 continue
             try:
                 await ws.send_text(message)
             except Exception:
+                # Если клиент умер, удаляем
                 self.disconnect(ws)
 
+
 rooms: Dict[str, ChatRoom] = {}
+
 
 def _get_or_create_room(chat_name: str) -> ChatRoom:
     room = rooms.get(chat_name)
@@ -258,10 +383,13 @@ def _get_or_create_room(chat_name: str) -> ChatRoom:
         rooms[chat_name] = room
     return room
 
+
 def _generate_username() -> str:
+    # Простая генерация имени пользователя
     from uuid import uuid4
 
     return f"user-{uuid4().hex[:6]}"
+
 
 @app.websocket("/chat/{chat_name}")
 async def websocket_chat(websocket: WebSocket, chat_name: str):

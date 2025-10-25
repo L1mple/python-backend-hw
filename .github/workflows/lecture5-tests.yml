@@ -1,0 +1,56 @@
+name: Lecture 5 Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'lecture5/**'
+      - 'hw2/**'
+      - '.github/workflows/lecture5-tests.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'lecture5/**'
+      - 'hw2/**'
+      - '.github/workflows/lecture5-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r hw2/hw/requirements.txt
+        pip install pytest-cov prometheus-fastapi-instrumentator sqlalchemy
+    
+    - name: Set PYTHONPATH
+      run: echo "PYTHONPATH=${PWD}/hw2/hw" >> $GITHUB_ENV
+    
+    - name: Run existing hw2 tests
+      run: |
+        pytest -vv --showlocals --strict hw2/hw/test_homework2.py
+    
+    - name: Run lecture5 coverage tests
+      run: |
+        pytest -vv --showlocals --strict --cov=hw2.hw.shop_api --cov-report=xml --cov-report=html lecture5/hw/test_lecture5.py
+    
+    - name: Check coverage threshold
+      run: |
+        pytest --cov=hw2.hw.shop_api --cov-fail-under=95 lecture5/hw/test_lecture5.py
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: lecture5
+        name: lecture5-coverage
+        fail_ci_if_error: false

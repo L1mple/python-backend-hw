@@ -9,8 +9,11 @@ services:
     container_name: shop-api
     environment:
       - PYTHONPATH=/app/hw2/hw
+      - DATABASE_URL=sqlite:///./data/shop.db
     ports:
       - "8000:8000"
+    volumes:
+      - shop_data:/app/data
     networks:
       - monitoring
 
@@ -39,5 +42,8 @@ services:
 networks:
   monitoring:
     driver: bridge
+
+volumes:
+  shop_data:
 
 
