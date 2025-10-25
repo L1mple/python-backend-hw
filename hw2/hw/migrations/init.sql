@@ -1,0 +1,17 @@
+CREATE TABLE items (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    price DOUBLE PRECISION NOT NULL,
+    deleted BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE carts (
+    id SERIAL PRIMARY KEY
+);
+
+CREATE TABLE cart_items (
+    id SERIAL PRIMARY KEY,
+    cart_id INTEGER REFERENCES carts(id) ON DELETE CASCADE,
+    item_id INTEGER REFERENCES items(id) ON DELETE CASCADE,
+    quantity INTEGER DEFAULT 1
+);
