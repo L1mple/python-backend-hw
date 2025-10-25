@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: ./app
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app/src:/app/src
+      - ./app/scripts:/app/scripts
+      - ./app/tests:/app/tests
+    command: ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8000"]
+
+volumes:
+  pgdata: {}

@@ -1,0 +1,65 @@
+Starting all isolation level tests...
+Cleared item with id=1
+Created item with id=1 and price=150.0
+
+===== DIRTY READ TEST =====
+
+=== Test with Read Committed ===
+(Read Uncommitted is not supported in Postgres; default is Read Committed)
+Transaction 1: Starting
+Transaction 1: Item found, its price = 150.00
+Transaction 1: Changed price to 200 (not committed)
+Transaction 2: Starting
+Transaction 2: Read price = 150.00
+Transaction 1: Rolling back
+Cleared item with id=1
+Created item with id=1 and price=150.0
+
+===== NON-REPEATABLE READ TEST (READ COMMITTED) =====
+
+T1: Starting (RC)
+T1: First read = 150.00
+T2: Starting writer (RC)
+T2: Committed update to 250
+T1: Second read (changed) = 250.00
+Cleared item with id=1
+Created item with id=1 and price=150.0
+
+===== NON-REPEATABLE READ PREVENTED (REPEATABLE READ) =====
+
+T1: Starting (RR)
+T1: First read = 150.00
+T2: Starting writer (RC)
+T2: Committed update to 300 (not visible to T1)
+T1: Second read (same snapshot) = 150.00
+
+===== PHANTOM READ TEST (READ COMMITTED) =====
+
+Cleared items with prefix Z
+Seeded items: Z1
+T1: Starting (RC)
+T1: First count = 1
+T2: Starting inserter (RC)
+T2: Inserted Z2
+T1: Second count (phantom appeared) = 2
+
+===== NO PHANTOM READ (REPEATABLE READ) =====
+
+Cleared items with prefix Z
+Seeded items: Z1
+T1: Starting (RR)
+T1: First count = 1
+T2: Starting inserter (RC)
+T2: Inserted Z3 (not visible to T1 snapshot)
+T1: Second count (no phantom) = 1
+
+===== NO PHANTOM READ (SERIALIZABLE) =====
+
+Cleared items with prefix S
+Seeded items: S1
+T1: Starting (SERIALIZABLE)
+T1: First count = 1
+T2: Starting inserter (SERIALIZABLE)
+T2: Commit OK (S2 inserted)
+T1: Second count (no phantom) = 1
+T1: Commit OK
