@@ -1,13 +1,22 @@
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, Depends
 from pydantic import BaseModel, Field, ConfigDict
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from uuid import uuid4
+
+from .db import Base as ORMBase, engine, get_session
+from prometheus_fastapi_instrumentator import Instrumentator
+from .models import Item as ItemModel, Cart as CartModel, CartItem as CartItemModel
 
 
 app = FastAPI(title="Shop API")
 
+# Expose Prometheus metrics at /metrics
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
-# In-memory storage
+
 class Item(BaseModel):
     id: int
     name: str
@@ -32,88 +41,61 @@ class ItemPatch(BaseModel):
     price: Optional[float] = Field(default=None, ge=0)
 
 
-class CartItem(BaseModel):
-    item_id: int
-    quantity: int = 0
-
-
-class Cart(BaseModel):
-    id: int
-    items: Dict[int, CartItem] = Field(default_factory=dict)
-
-
-items_store: Dict[int, Item] = {}
-item_id_counter: int = 1
-
-carts_store: Dict[int, Cart] = {}
-cart_id_counter: int = 1
-
-
-def get_next_item_id() -> int:
-    global item_id_counter
-    next_id = item_id_counter
-    item_id_counter += 1
-    return next_id
-
-
-def get_next_cart_id() -> int:
-    global cart_id_counter
-    next_id = cart_id_counter
-    cart_id_counter += 1
-    return next_id
-
-
-def compute_cart_price(cart: Cart) -> float:
+def compute_cart_price(db: Session, cart: CartModel) -> float:
     total: float = 0.0
-    for cart_item in cart.items.values():
-        item = items_store.get(cart_item.item_id)
-        if item is None:
+    for ci in cart.items:
+        # item might have been deleted; still counted in price with current item price
+        if ci.item is None:
             continue
-        total += item.price * cart_item.quantity
+        total += (ci.item.price or 0.0) * ci.quantity
     return total
 
 
-def compute_cart_quantity(cart: Cart) -> int:
-    return sum(ci.quantity for ci in cart.items.values())
+def compute_cart_quantity(cart: CartModel) -> int:
+    return sum(ci.quantity for ci in cart.items)
 
 
-def cart_to_response(cart: Cart) -> dict:
+def cart_to_response(db: Session, cart: CartModel) -> dict:
     response_items: List[dict] = []
-    for cart_item in cart.items.values():
-        item = items_store.get(cart_item.item_id)
-        if item is None:
-            # Skip unknown items silently
+    for ci in cart.items:
+        if ci.item is None:
             continue
         response_items.append(
             {
-                "id": item.id,
-                "name": item.name,
-                "quantity": cart_item.quantity,
-                "available": not item.deleted,
+                "id": ci.item.id,
+                "name": ci.item.name,
+                "quantity": ci.quantity,
+                "available": not ci.item.deleted,
             }
         )
     return {
         "id": cart.id,
         "items": response_items,
-        "price": compute_cart_price(cart),
+        "price": compute_cart_price(db, cart),
     }
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    ORMBase.metadata.create_all(bind=engine)
 
 
 # Item endpoints
 @app.post("/item", status_code=201)
-def create_item(item_in: ItemCreate):
-    item_id = get_next_item_id()
-    item = Item(id=item_id, name=item_in.name, price=item_in.price, deleted=False)
-    items_store[item_id] = item
-    return item.model_dump()
+def create_item(item_in: ItemCreate, db: Session = Depends(get_session)):
+    item = ItemModel(name=item_in.name, price=item_in.price, deleted=False)
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id, "name": item.name, "price": item.price, "deleted": item.deleted}
 
 
 @app.get("/item/{item_id}")
-def get_item(item_id: int):
-    item = items_store.get(item_id)
+def get_item(item_id: int, db: Session = Depends(get_session)):
+    item = db.get(ItemModel, item_id)
     if item is None or item.deleted:
         raise HTTPException(status_code=404)
-    return item.model_dump()
+    return {"id": item.id, "name": item.name, "price": item.price, "deleted": item.deleted}
 
 
 @app.get("/item")
@@ -123,75 +105,82 @@ def list_items(
     min_price: Optional[float] = Query(default=None, ge=0),
     max_price: Optional[float] = Query(default=None, ge=0),
     show_deleted: bool = Query(False),
+    db: Session = Depends(get_session),
 ):
-    data: List[Item] = list(items_store.values())
+    stmt = select(ItemModel)
+    items = list(db.scalars(stmt))
 
     if not show_deleted:
-        data = [i for i in data if not i.deleted]
+        items = [i for i in items if not i.deleted]
 
     if min_price is not None:
-        data = [i for i in data if i.price >= min_price]
+        items = [i for i in items if i.price >= min_price]
 
     if max_price is not None:
-        data = [i for i in data if i.price <= max_price]
+        items = [i for i in items if i.price <= max_price]
 
-    sliced = data[offset : offset + limit]
-    return [i.model_dump() for i in sliced]
+    sliced = items[offset : offset + limit]
+    return [{"id": i.id, "name": i.name, "price": i.price, "deleted": i.deleted} for i in sliced]
 
 
 @app.put("/item/{item_id}")
-def replace_item(item_id: int, item_in: ItemReplace):
-    item = items_store.get(item_id)
+def replace_item(item_id: int, item_in: ItemReplace, db: Session = Depends(get_session)):
+    item = db.get(ItemModel, item_id)
     if item is None or item.deleted:
         raise HTTPException(status_code=404)
     item.name = item_in.name
     item.price = item_in.price
-    items_store[item_id] = item
-    return item.model_dump()
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id, "name": item.name, "price": item.price, "deleted": item.deleted}
 
 
 @app.patch("/item/{item_id}")
-def patch_item(item_id: int, patch: ItemPatch):
-    item = items_store.get(item_id)
+def patch_item(item_id: int, patch: ItemPatch, db: Session = Depends(get_session)):
+    item = db.get(ItemModel, item_id)
     if item is None:
         raise HTTPException(status_code=404)
     if item.deleted:
         return Response(status_code=304)
 
-    updated = item.model_copy()
     if patch.name is not None:
-        updated.name = patch.name
+        item.name = patch.name
     if patch.price is not None:
-        updated.price = patch.price
-    items_store[item_id] = updated
-    return updated.model_dump()
+        item.price = patch.price
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {"id": item.id, "name": item.name, "price": item.price, "deleted": item.deleted}
 
 
 @app.delete("/item/{item_id}")
-def delete_item(item_id: int):
-    item = items_store.get(item_id)
+def delete_item(item_id: int, db: Session = Depends(get_session)):
+    item = db.get(ItemModel, item_id)
     if item is not None:
         item.deleted = True
-        items_store[item_id] = item
-    # Idempotent delete
+        db.add(item)
+        db.commit()
     return {"status": "ok"}
 
 
 # Cart endpoints
 @app.post("/cart", status_code=201)
-def create_cart(response: Response):
-    cart_id = get_next_cart_id()
-    carts_store[cart_id] = Cart(id=cart_id, items={})
-    response.headers["Location"] = f"/cart/{cart_id}"
-    return {"id": cart_id}
+def create_cart(response: Response, db: Session = Depends(get_session)):
+    cart = CartModel()
+    db.add(cart)
+    db.commit()
+    db.refresh(cart)
+    response.headers["Location"] = f"/cart/{cart.id}"
+    return {"id": cart.id}
 
 
 @app.get("/cart/{cart_id}")
-def get_cart(cart_id: int):
-    cart = carts_store.get(cart_id)
+def get_cart(cart_id: int, db: Session = Depends(get_session)):
+    cart = db.get(CartModel, cart_id)
     if cart is None:
         raise HTTPException(status_code=404)
-    return cart_to_response(cart)
+    return cart_to_response(db, cart)
 
 
 @app.get("/cart")
@@ -202,19 +191,19 @@ def list_carts(
     max_price: Optional[float] = Query(default=None, ge=0),
     min_quantity: Optional[int] = Query(default=None, ge=0),
     max_quantity: Optional[int] = Query(default=None, ge=0),
+    db: Session = Depends(get_session),
 ):
-    carts: List[Cart] = list(carts_store.values())
+    carts = list(db.scalars(select(CartModel)))
 
-    # Apply per-cart filters
-    def within_price(cart: Cart) -> bool:
-        price = compute_cart_price(cart)
+    def within_price(cart: CartModel) -> bool:
+        price = compute_cart_price(db, cart)
         if min_price is not None and price < min_price:
             return False
         if max_price is not None and price > max_price:
             return False
         return True
 
-    def within_quantity(cart: Cart) -> bool:
+    def within_quantity(cart: CartModel) -> bool:
         qty = compute_cart_quantity(cart)
         if min_quantity is not None and qty < min_quantity:
             return False
@@ -224,25 +213,35 @@ def list_carts(
 
     filtered = [c for c in carts if within_price(c) and within_quantity(c)]
     sliced = filtered[offset : offset + limit]
-    return [cart_to_response(c) for c in sliced]
+    return [cart_to_response(db, c) for c in sliced]
 
 
 @app.post("/cart/{cart_id}/add/{item_id}")
-def add_item_to_cart(cart_id: int, item_id: int):
-    cart = carts_store.get(cart_id)
+def add_item_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_session)):
+    cart = db.get(CartModel, cart_id)
     if cart is None:
         raise HTTPException(status_code=404)
-    item = items_store.get(item_id)
+    item = db.get(ItemModel, item_id)
     if item is None:
         raise HTTPException(status_code=404)
-    existing = cart.items.get(item_id)
+
+    # Find existing cart item
+    existing = None
+    for ci in cart.items:
+        if ci.item_id == item_id:
+            existing = ci
+            break
+
     if existing is None:
-        cart.items[item_id] = CartItem(item_id=item_id, quantity=1)
+        new_ci = CartItemModel(cart_id=cart.id, item_id=item.id, quantity=1)
+        db.add(new_ci)
     else:
         existing.quantity += 1
-        cart.items[item_id] = existing
-    carts_store[cart_id] = cart
-    return cart_to_response(cart)
+        db.add(existing)
+
+    db.commit()
+    db.refresh(cart)
+    return cart_to_response(db, cart)
 
 
 # WebSocket chat (extra task)
