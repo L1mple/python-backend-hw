@@ -1,0 +1,1 @@
+from .main import SCHEMA_SQL
