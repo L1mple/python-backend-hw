@@ -57,10 +57,18 @@ class CartOrm(Base):
 
 
 # Database connection setup
-DATABASE_URL = (
-    "mysql+pymysql://shop_user:shop_password@localhost:3306/shop_db?charset=utf8mb4"
-)
+import os
 
+# Get database connection details from environment variables
+DB_USER = os.getenv("MYSQL_USER", "shop_user")
+DB_PASSWORD = os.getenv("MYSQL_PASSWORD", "shop_password")
+DB_HOST = os.getenv("MYSQL_HOST", "localhost")
+DB_PORT = os.getenv("MYSQL_PORT", "3306")
+DB_NAME = os.getenv("MYSQL_DATABASE", "shop_db")
+
+DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
+
+print(f"🔌 Connecting to database: {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
 # Connection pool settings for production
 engine = create_engine(

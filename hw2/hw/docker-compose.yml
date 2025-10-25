@@ -1,5 +1,24 @@
 services:
 
+  mysql:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: shop_db
+      MYSQL_USER: shop_user
+      MYSQL_PASSWORD: shop_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   shop-api:
     build:
       context: .
@@ -7,6 +26,15 @@ services:
     restart: always
     ports:
       - 8080:8080
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: shop_db
+      MYSQL_USER: shop_user
+      MYSQL_PASSWORD: shop_password
+    depends_on:
+      mysql:
+        condition: service_healthy
 
   grafana:
     image: grafana/grafana:latest
@@ -35,3 +63,5 @@ services:
     depends_on:
       - shop-api
 
+volumes:
+  mysql_data:

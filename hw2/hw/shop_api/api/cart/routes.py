@@ -1,11 +1,11 @@
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import NonNegativeInt, PositiveInt
 
-from shop_api import store
-from shop_api.store.models import CartInfo
+from shop_api.store.dependencies import get_cart_service
+from shop_api.store.services import CartService
 
 from .contracts import CartResponse, CartIdResponse
 
@@ -16,9 +16,12 @@ router = APIRouter(prefix="/cart")
     "/",
     status_code=HTTPStatus.CREATED,
 )
-async def post_cart(response: Response) -> CartIdResponse:
+async def post_cart(
+    response: Response,
+    service: CartService = Depends(get_cart_service),
+) -> CartIdResponse:
     """Create a new empty cart (RPC-style endpoint)"""
-    entity = store.add_cart(CartInfo(items=[]))
+    entity = service.create_cart()
     response.headers["location"] = f"/cart/{entity.id}"
     return CartIdResponse.from_entity(entity)
 
@@ -34,17 +37,16 @@ async def post_cart(response: Response) -> CartIdResponse:
         },
     },
 )
-async def get_cart_by_id(id: int) -> CartResponse:
+async def get_cart_by_id(
+    id: int,
+    service: CartService = Depends(get_cart_service),
+) -> CartResponse:
     """Get cart by ID"""
-    entity = store.get_cart(id)
-
-    if entity is None:
-        raise HTTPException(
-            HTTPStatus.NOT_FOUND,
-            f"Request resource /cart/{id} was not found",
-        )
-
-    return CartResponse.from_entity(entity)
+    try:
+        entity = service.get_cart(id)
+        return CartResponse.from_entity(entity)
+    except ValueError as e:
+        raise HTTPException(HTTPStatus.NOT_FOUND, str(e))
 
 
 @router.get("/")
@@ -55,14 +57,14 @@ async def get_cart_list(
     max_price: Annotated[float | None, Query(ge=0)] = None,
     min_quantity: Annotated[NonNegativeInt | None, Query()] = None,
     max_quantity: Annotated[NonNegativeInt | None, Query()] = None,
+    service: CartService = Depends(get_cart_service),
 ) -> list[CartResponse]:
     """Get list of carts with optional filtering"""
-    return [
-        CartResponse.from_entity(e)
-        for e in store.get_many_carts(
-            offset, limit, min_price, max_price, min_quantity, max_quantity
-        )
-    ]
+    # List operations can go through repository (no business logic needed)
+    entities = service.cart_repo.find_many(
+        offset, limit, min_price, max_price, min_quantity, max_quantity
+    )
+    return [CartResponse.from_entity(e) for e in entities]
 
 
 @router.post(
@@ -76,16 +78,14 @@ async def get_cart_list(
         },
     },
 )
-async def add_item_to_cart(cart_id: int, item_id: int) -> CartResponse:
+async def add_item_to_cart(
+    cart_id: int,
+    item_id: int,
+    service: CartService = Depends(get_cart_service),
+) -> CartResponse:
     """Add item to cart (or increment quantity if already exists)"""
-    result = store.add_item_to_cart(cart_id, item_id)
-
-    if result is None:
-        raise HTTPException(
-            HTTPStatus.NOT_FOUND,
-            f"Cart {cart_id} or item {item_id} not found",
-        )
-
-    # Return updated cart
-    entity = store.get_cart(cart_id)
-    return CartResponse.from_entity(entity)
+    try:
+        updated_cart, _ = service.add_item_to_cart(cart_id, item_id)
+        return CartResponse.from_entity(updated_cart)
+    except ValueError as e:
+        raise HTTPException(HTTPStatus.NOT_FOUND, str(e))

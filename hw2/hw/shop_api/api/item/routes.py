@@ -1,10 +1,11 @@
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import NonNegativeInt, PositiveInt
 
-from shop_api import store
+from shop_api.store.dependencies import get_item_service
+from shop_api.store.services import ItemService
 
 from .contracts import ItemResponse, ItemRequest, PatchItemRequest
 
@@ -15,10 +16,17 @@ router = APIRouter(prefix="/item")
     "/",
     status_code=HTTPStatus.CREATED,
 )
-async def post_item(info: ItemRequest, response: Response) -> ItemResponse:
-    entity = store.add_item(info.as_item_info())
-    response.headers["location"] = f"/item/{entity.id}"
-    return ItemResponse.from_entity(entity)
+async def post_item(
+    info: ItemRequest,
+    response: Response,
+    service: ItemService = Depends(get_item_service),
+) -> ItemResponse:
+    try:
+        entity = service.create_item(info.name, info.price)
+        response.headers["location"] = f"/item/{entity.id}"
+        return ItemResponse.from_entity(entity)
+    except ValueError as e:
+        raise HTTPException(HTTPStatus.BAD_REQUEST, str(e))
 
 
 @router.get(
@@ -32,16 +40,15 @@ async def post_item(info: ItemRequest, response: Response) -> ItemResponse:
         },
     },
 )
-async def get_item_by_id(id: int) -> ItemResponse:
-    entity = store.get_item(id)
-
-    if entity is None:
-        raise HTTPException(
-            HTTPStatus.NOT_FOUND,
-            f"Request resource /item/{id} was not found",
-        )
-
-    return ItemResponse.from_entity(entity)
+async def get_item_by_id(
+    id: int,
+    service: ItemService = Depends(get_item_service),
+) -> ItemResponse:
+    try:
+        entity = service.get_item(id)
+        return ItemResponse.from_entity(entity)
+    except ValueError as e:
+        raise HTTPException(HTTPStatus.NOT_FOUND, str(e))
 
 
 @router.get("/")
@@ -51,11 +58,14 @@ async def get_item_list(
     min_price: Annotated[float | None, Query(ge=0)] = None,
     max_price: Annotated[float | None, Query(ge=0)] = None,
     show_deleted: Annotated[bool, Query()] = False,
+    service: ItemService = Depends(get_item_service),
 ) -> list[ItemResponse]:
-    return [
-        ItemResponse.from_entity(e)
-        for e in store.get_many_items(offset, limit, min_price, max_price, show_deleted)
-    ]
+    # For list operations, we can call repository directly through service
+    # Or add a method to service if needed
+    entities = service.item_repo.find_many(
+        offset, limit, min_price, max_price, show_deleted
+    )
+    return [ItemResponse.from_entity(e) for e in entities]
 
 
 @router.put(
@@ -69,16 +79,16 @@ async def get_item_list(
         },
     },
 )
-async def put_item(id: int, info: ItemRequest) -> ItemResponse:
-    entity = store.replace_item(id, info.as_item_info())
-
-    if entity is None:
-        raise HTTPException(
-            HTTPStatus.NOT_FOUND,
-            f"Requested resource /item/{id} was not found",
-        )
-
-    return ItemResponse.from_entity(entity)
+async def put_item(
+    id: int,
+    info: ItemRequest,
+    service: ItemService = Depends(get_item_service),
+) -> ItemResponse:
+    try:
+        entity = service.update_item(id, info.name, info.price)
+        return ItemResponse.from_entity(entity)
+    except ValueError as e:
+        raise HTTPException(HTTPStatus.NOT_FOUND, str(e))
 
 
 @router.patch(
@@ -92,8 +102,13 @@ async def put_item(id: int, info: ItemRequest) -> ItemResponse:
         },
     },
 )
-async def patch_item(id: int, info: PatchItemRequest) -> ItemResponse:
-    entity = store.patch_item(id, info.as_patch_item_info())
+async def patch_item(
+    id: int,
+    info: PatchItemRequest,
+    service: ItemService = Depends(get_item_service),
+) -> ItemResponse:
+    # Patch is a repository-level operation (no special business logic needed)
+    entity = service.item_repo.patch(id, info.as_patch_item_info())
 
     if entity is None:
         raise HTTPException(
@@ -115,8 +130,12 @@ async def patch_item(id: int, info: PatchItemRequest) -> ItemResponse:
         },
     },
 )
-async def delete_item(id: int) -> ItemResponse:
-    entity = store.delete_item(id)
+async def delete_item(
+    id: int,
+    service: ItemService = Depends(get_item_service),
+) -> ItemResponse:
+    # Delete is a repository-level operation (soft delete)
+    entity = service.item_repo.delete(id)
 
     if entity is None:
         raise HTTPException(
