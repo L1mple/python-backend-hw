@@ -31,9 +31,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run tests
+    - name: Run tests with coverage
       working-directory: hw2/hw
       env:
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
       run: |
-        pytest test_homework2.py -v
+        pytest test_homework2.py -v --cov=shop_api --cov-report=term --cov-fail-under=95
