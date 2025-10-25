@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+[tools.fixtup]
+fixtures = "hw2/tests/fixtures"
+plugins = [
+    "fixtup.plugins.dotenv",
+    "fixtup.plugins.docker"
+]
