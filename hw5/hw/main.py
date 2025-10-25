@@ -11,4 +11,3 @@ app.include_router(item)
 @app.get("/")
 async def root():
     return {"message": "API Shop is running"}
-
