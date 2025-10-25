@@ -17,7 +17,7 @@ from shop_api.database import init_db, get_session, Item as ItemDB, Cart as Cart
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    yield
+    yield  # pragma: no cover
 
 app = FastAPI(title="Shop API", lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)

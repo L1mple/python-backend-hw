@@ -1,0 +1,6 @@
+[run]
+source = shop_api
+concurrency = thread,greenlet
+
+[report]
+precision = 2
