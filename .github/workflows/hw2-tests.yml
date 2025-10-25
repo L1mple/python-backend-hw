@@ -12,6 +12,23 @@ on:
 jobs:
   test-hw2:
     runs-on: ubuntu-latest
+    
+    # Добавляем PostgreSQL как service container
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: shop_db
+          POSTGRES_USER: shop_user
+          POSTGRES_PASSWORD: shop_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
@@ -31,9 +48,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run tests
+    - name: Run tests with coverage
       working-directory: hw2/hw
       env:
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
+        DATABASE_URL: postgresql://shop_user:shop_password@localhost:5432/shop_db
       run: |
-        pytest test_homework2.py -v
+        pytest test_homework2.py -v --cov=shop_api --cov-report=term-missing --cov-fail-under=95
