@@ -497,6 +497,20 @@ def test_websocket_functions_coverage():
     room = ChatRoom()
     assert room.connections == {}
     
+    # Тест методов ChatRoom
+    from unittest.mock import Mock
+    mock_websocket = Mock()
+    
+    # Тест connect (async метод, но мы можем проверить структуру)
+    assert hasattr(room, 'connect')
+    assert hasattr(room, 'disconnect')
+    assert hasattr(room, 'broadcast')
+    
+    # Тест disconnect
+    room.connections[mock_websocket] = "test_user"
+    room.disconnect(mock_websocket)
+    assert mock_websocket not in room.connections
+    
     # Тест broadcast_message (если функция существует)
     try:
         from shop_api.main import broadcast_message
@@ -558,6 +572,45 @@ def test_validation_coverage():
     # Тест попытки изменить deleted в patch_item
     response = client.patch(f"/item/{item_id}", json={"deleted": True})
     assert response.status_code == 422
+
+
+def test_edge_cases_coverage():
+    """Тесты для покрытия граничных случаев."""
+    
+    # Тест с пустым телом в create_item
+    response = client.post("/item", json={})
+    assert response.status_code == 422
+    
+    # Тест с None в create_item
+    response = client.post("/item", json={"name": None, "price": None})
+    assert response.status_code == 422
+    
+    # Тест с пустым телом в replace_item
+    response = client.post("/item", json={"name": "test", "price": 100.0})
+    item_id = response.json()["id"]
+    
+    response = client.put(f"/item/{item_id}", json={})
+    assert response.status_code == 422
+    
+    # Тест с None в replace_item
+    response = client.put(f"/item/{item_id}", json={"name": None, "price": None})
+    assert response.status_code == 422
+    
+    # Тест с пустым телом в patch_item
+    response = client.patch(f"/item/{item_id}", json={})
+    assert response.status_code == 200  # Пустое обновление разрешено
+    
+    # Тест с None в patch_item
+    response = client.patch(f"/item/{item_id}", json={"name": None})
+    assert response.status_code == 200  # None значения игнорируются
+    
+    # Тест с отрицательной ценой
+    response = client.post("/item", json={"name": "test", "price": -100.0})
+    assert response.status_code == 201  # Отрицательная цена разрешена
+    
+    # Тест с очень большой ценой
+    response = client.post("/item", json={"name": "test", "price": 999999999.99})
+    assert response.status_code == 201
 
 
 if __name__ == "__main__":
