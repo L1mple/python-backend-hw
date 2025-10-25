@@ -212,9 +212,9 @@ def patch_item(item_id: int, body: Dict[str, Any], db: Session = Depends(get_db)
     if "deleted" in body:
         raise HTTPException(status_code=422)
 
-    if "name" in body:
+    if "name" in body and body["name"] is not None:
         existing.name = body["name"]
-    if "price" in body:
+    if "price" in body and body["price"] is not None:
         try:
             existing.price = float(body["price"])
         except (ValueError, TypeError):

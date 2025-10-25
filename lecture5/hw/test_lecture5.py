@@ -600,7 +600,7 @@ def test_edge_cases_coverage():
     response = client.patch(f"/item/{item_id}", json={})
     assert response.status_code == 200  # Пустое обновление разрешено
     
-    # Тест с None в patch_item
+    # Тест с None в patch_item (None значения игнорируются)
     response = client.patch(f"/item/{item_id}", json={"name": None})
     assert response.status_code == 200  # None значения игнорируются
     
