@@ -7,7 +7,7 @@ from sqlalchemy import Column, ForeignKey, Integer
 from sqlalchemy.orm import Session, relationship
 
 from db.init import Base
-from db.item import Item, ItemMapper, ItemRepositoryInterface
+from db.item import ItemMapper, ItemRepositoryInterface
 
 
 # === Доменные модели (без привязки к БД) ===
@@ -219,14 +219,4 @@ class CartService:
         for _ in range(count):
             cart.items.append(item)
 
-        return self.cart_repo.update(cart)
-
-
-    def clear_cart(self, cart_id: int) -> Cart:
-        """Очистка корзины"""
-        cart = self.cart_repo.find_by_id(cart_id)
-        if not cart:
-            raise ValueError(f"Cart with id {cart_id} not found")
-
-        cart.items = []
         return self.cart_repo.update(cart)

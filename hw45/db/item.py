@@ -102,10 +102,12 @@ class SqlAlchemyItemRepository(ItemRepositoryInterface):
     def __init__(self, session: Session):
         self.session = session
 
-    def create(self, item: Item) -> Item:
+    # is_commit используется для возможности демонстрации различных уровней изоляции транзакций в тестах
+    def create(self, item: Item, is_commit = True) -> Item:
         orm_item = ItemMapper.to_orm(item)
         self.session.add(orm_item)
-        self.session.commit()
+        if is_commit:
+            self.session.commit()
         return ItemMapper.to_domain(orm_item)
 
     def find_by_id(self, item_id: int) -> Optional[Item]:
@@ -121,7 +123,7 @@ class SqlAlchemyItemRepository(ItemRepositoryInterface):
     def update(self, item: Item) -> Item:
         orm_item = self.session.query(ItemOrm).filter_by(id=item.id).first()
         if not orm_item:
-            raise ValueError(f"Item with id {item.id} not found")
+           raise ValueError(f"Item with id {item.id} not found")
 
         ItemMapper.to_orm(item, orm_item)
         self.session.commit()

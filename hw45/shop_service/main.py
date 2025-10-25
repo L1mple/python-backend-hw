@@ -20,7 +20,7 @@ async def docs_redirect():
     return RedirectResponse(url="/docs", status_code=301)
 
 
-if name == "main":
+if __name__ == "main":
     import uvicorn
     
     uvicorn.run(
