@@ -1,0 +1,17 @@
+[run]
+source = shop_api
+omit =
+    shop_api/load_test.py
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+
+[report]
+precision = 2
+skip_empty = True
+show_missing = True
+fail_under = 95
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__.:

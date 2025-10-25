@@ -1,0 +1,30 @@
+name: HW4-5 Tests
+
+on:
+  push:
+    branches:
+      - 'krasnobaeva/**'
+    paths:
+      - 'hw2/**'
+  workflow_dispatch:
+
+jobs:
+  test-hw2:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+    
+    - name: Install dependencies
+      working-directory: hw2/hw
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Run tests
+      working-directory: hw2/hw
+      run: |
+        pytest -v --cov=shop_api
+        coverage report --fail-under=95
