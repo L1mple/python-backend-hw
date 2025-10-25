@@ -4,12 +4,23 @@ from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey
 from sqlalchemy.orm import relationship, sessionmaker, declarative_base
 from sqlalchemy import create_engine
 from typing import List, Optional
+from prometheus_client import Counter, Histogram, generate_latest, REGISTRY
+from starlette.responses import Response
+import time
+import os
 
 # Database setup
-SQLALCHEMY_DATABASE_URL = "sqlite:///./shop.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+# SQLALCHEMY_DATABASE_URL = "sqlite:///./shop.db"
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL", 
+    "mysql+pymysql://user:password@mysql:3306/shop_db"
+)
+engine = create_engine(SQLALCHEMY_DATABASE_URL)  #, connect_args={"check_same_thread": False}
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP Requests', ['method', 'endpoint', 'status'])
+REQUEST_LATENCY = Histogram('http_request_duration_seconds', 'HTTP request latency', ['method', 'endpoint'])
 
 def get_db():
     db = SessionLocal()
@@ -88,6 +99,32 @@ class ItemPatch(BaseModel):
 
     class Config:
         extra = "forbid"
+
+# Middleware для сбора метрик
+@app.middleware("http")
+async def monitor_requests(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    
+    # Получаем путь endpoint'а
+    endpoint = request.url.path
+    method = request.method
+    
+    # Игнорируем метрики для самого endpoint'а /metrics
+    if endpoint != "/metrics":
+        REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
+        REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(time.time() - start_time)
+    
+    return response
+
+# Endpoint для Prometheus метрик
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(REGISTRY), media_type="text/plain")
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
 # Cart endpoints
 @app.post("/cart", status_code=status.HTTP_201_CREATED)
@@ -336,3 +373,8 @@ def delete_item(item_id: int, db: SessionLocal = Depends(get_db)):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+@app.on_event("startup")
+def startup_event():
+    # Создаем таблицы при запуске приложения
+    Base.metadata.create_all(bind=engine)
