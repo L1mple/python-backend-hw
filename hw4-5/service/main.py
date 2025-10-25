@@ -8,7 +8,7 @@ import os
 import time
 
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, ForeignKey
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 
 app = FastAPI(title="Shop API")
