@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from shop_api.main import app
 
 client = TestClient(app)
+client.__enter__()
 faker = Faker()
 
 

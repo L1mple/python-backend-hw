@@ -1,0 +1,38 @@
+version: "3"
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: shop_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: shop_db
+      POSTGRES_USER: shop_user
+      POSTGRES_PASSWORD: shop_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  local:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: local
+    restart: always
+    ports:
+      - 8080:8080
+    environment:
+      DATABASE_URL: postgresql://shop_user:shop_password@postgres:5432/shop_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
