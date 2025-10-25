@@ -1,12 +1,14 @@
 from http import HTTPStatus
-from typing import Annotated, Optional
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from pydantic import NonNegativeInt, PositiveInt, NonNegativeFloat
+from sqlalchemy.orm import Session
 
 from shop_api import store
 
 from .contracts import (
+    ItemMapper,
     ItemResponse,
     ItemRequest,
     ItemRequest,
@@ -22,9 +24,10 @@ async def get_item_list(
     limit: Annotated[PositiveInt, Query()] = 10,
     min_price: Annotated[NonNegativeFloat | None, Query()] = None,
     max_price: Annotated[NonNegativeFloat | None, Query()] = None,
-    show_deleted: Annotated[bool, Query()] = False
+    show_deleted: Annotated[bool, Query()] = False, 
+    db: Session = Depends(store.get_db)
 ) -> list[ItemResponse]:
-    return [ItemResponse.from_entity(e) for e in store.get_items(offset, limit, min_price, max_price, show_deleted)]
+    return [ItemMapper.to_domain(orm_item) for orm_item in store.get_items(db, offset, limit, min_price, max_price, show_deleted)]
 
 
 @item_router.get(
@@ -38,29 +41,29 @@ async def get_item_list(
         },
     },
 )
-async def get_item_by_id(id: int) -> ItemResponse:
-    entity = store.get_item(id)
+async def get_item_by_id(id: int, db: Session = Depends(store.get_db)) -> ItemResponse:
+    orm_item = store.get_item(db, id)
 
-    if not entity:
+    if not orm_item:
         raise HTTPException(
             HTTPStatus.NOT_FOUND,
             f"Request resource /item/{id} was not found",
         )
 
-    return ItemResponse.from_entity(entity)
+    return ItemMapper.to_domain(orm_item)
 
 
 @item_router.post(
     "/",
     status_code=HTTPStatus.CREATED,
 )
-async def post_item(info: ItemRequest, response: Response) -> ItemResponse:
-    entity = store.add_item(info.as_item_info())
+async def post_item(info: ItemRequest, response: Response, db: Session = Depends(store.get_db)) -> ItemResponse:
+    orm_item = store.add_item(db, ItemMapper.to_orm(info))
 
     # as REST states one should provide uri to newly created resource in location header
-    response.headers["location"] = f"/item/{entity.id}"
+    response.headers["location"] = f"/item/{orm_item.id}"
 
-    return ItemResponse.from_entity(entity)
+    return ItemMapper.to_domain(orm_item)
 
 
 @item_router.patch(
@@ -74,16 +77,16 @@ async def post_item(info: ItemRequest, response: Response) -> ItemResponse:
         },
     },
 )
-async def patch_item(id: int, info: PatchItemRequest) -> ItemResponse:
-    entity = store.patch_item(id, info.as_patch_item_info())
+async def patch_item(id: int, info: PatchItemRequest, db: Session = Depends(store.get_db)) -> ItemResponse:
+    orm_item = store.patch_item(db, id, info.name, info.price)
 
-    if entity is None:
+    if orm_item is None:
         raise HTTPException(
             HTTPStatus.NOT_MODIFIED,
             f"Requested resource /item/{id} was not found",
         )
 
-    return ItemResponse.from_entity(entity)
+    return ItemMapper.to_domain(orm_item)
 
 
 @item_router.put(
@@ -99,22 +102,23 @@ async def patch_item(id: int, info: PatchItemRequest) -> ItemResponse:
 )
 async def put_item(
     id: int,
-    info: ItemRequest
+    info: ItemRequest,
+    db: Session = Depends(store.get_db)
 ) -> ItemResponse:
-    entity = store.update_item(id, info)
+    orm_item = store.update_item(db, id, info.name, info.price, info.deleted)
 
-    if entity is None:
+    if orm_item is None:
         raise HTTPException(
             HTTPStatus.NOT_MODIFIED,
             f"Requested resource /item/{id} was not found",
         )
     
-    return ItemResponse.from_entity(entity)
+    return ItemMapper.to_domain(orm_item)
 
 
 @item_router.delete("/{id}")
-async def delete_item(id: int) -> Response:
+async def delete_item(id: int, db: Session = Depends(store.get_db)) -> Response:
 
-    store.delete_item(id)
+    store.delete_item(db, id)
 
     return Response("")

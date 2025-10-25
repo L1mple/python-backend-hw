@@ -1,40 +1,48 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 from typing import Iterable
 
 from shop_api.store.models import (
-    CartItemInfo,
-    CartEntity,
-    CartInfo
+    Cart,
+    CartItem
 )
 
+class CartMapper:
+    """Маппер для преобразования между CartResponse и Cart (ORM)"""
 
-# class CartItemResponse(BaseModel):
-#     id: int
-#     name: str
-#     quantity: int
-#     available: bool
+    @staticmethod
+    def to_domain(orm_cart: Cart) -> CartResponse:
+        """Преобразование ORM модели в доменную"""
+        return CartResponse(
+            id=orm_cart.id,
+            items=[CartItemMapper.to_domain(item) for item in orm_cart.items],
+            price=orm_cart.price
+        )
 
-#     @staticmethod
-#     def from_entity(entity: CartItemEntity) -> CartItemResponse:
-#         return CartItemResponse(
-#             id=entity.id,
-#             name=entity.info.name,
-#             quantity=entity.info.quantity,
-#             available=entity.info.available
-#         )
+
+class CartItemMapper:
+    """Маппер для преобразования между CartItemResponse и CartItem (ORM)"""
+
+    @staticmethod
+    def to_domain(orm_cart_item: CartItem) -> CartItemResponse:
+        """Преобразование ORM модели в доменную"""
+        return CartItemResponse(
+            id=orm_cart_item.id,
+            name=orm_cart_item.item.name,
+            quantity=orm_cart_item.quantity,
+            available=not orm_cart_item.item.deleted
+        )
+
+
+class CartItemResponse(BaseModel):
+    id: int
+    name: str
+    quantity: int
+    available: bool
 
 
 class CartResponse(BaseModel):
     id: int
-    items: Iterable[CartItemInfo]
+    items: Iterable[CartItemResponse]
     price: float
-
-    @staticmethod
-    def from_entity(entity: CartEntity) -> CartResponse:
-        return CartResponse(
-            id=entity.id,
-            items=entity.info.items,
-            price=entity.info.price,
-        )

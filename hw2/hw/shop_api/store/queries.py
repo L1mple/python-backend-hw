@@ -1,146 +1,166 @@
 from typing import Iterable
+from sqlalchemy.orm import Session
 
 from shop_api.store.models import (
-    ItemInfo,
-    CartInfo,
-    PatchItemInfo,
-    ItemEntity,
-    CartEntity,
-    CartInfo,
-    CartItemInfo
+    Item,
+    Cart,
+    CartItem
 )
 
 
-_carts_data = dict[int, CartInfo]()
-_items_data = dict[int, ItemInfo]()
+def add_item(db: Session, orm_item: Item) -> Item:
+    db.add(orm_item)
+    db.commit()
+    db.refresh(orm_item)
+    return orm_item
 
 
-def int_id_generator() -> Iterable[int]:
-    i = 0
-    while True:
-        yield i
-        i += 1
+def delete_item(db: Session, id: int) -> None:
+    orm_item = get_item(db, id)
+    if orm_item != None:
+        orm_item.deleted = True
+        db.commit()
 
 
-_item_id_generator = int_id_generator()
-
-_cart_id_generator = int_id_generator()
-
-
-def add_item(info: ItemInfo) -> ItemEntity:
-    _id = next(_item_id_generator)
-    _items_data[_id] = info
-
-    return ItemEntity(_id, info)
-
-
-def delete_item(id: int) -> None:
-    if id in _items_data:
-        del _items_data[id]
-
-
-def get_item(id: int) -> ItemEntity | None:
-    if id not in _items_data:
-        return None
-
-    return ItemEntity(id=id, info=_items_data[id])
+def get_item(db: Session, id: int) -> Item | None:
+    return db.query(Item).filter(Item.id == id).first()
 
 
 def get_items(
+        db: Session,
         offset: int = 0, 
         limit: int = 10, 
         min_price: float | None = None,
         max_price: float | None = None,
         show_deleted: bool = False
-    ) -> Iterable[ItemEntity]:
-    curr = 0
-    for id, info in _items_data.items():
-        if (offset <= curr < offset + limit) and \
-            (min_price == None or info.price >= min_price) and \
-            (max_price == None or info.price <= max_price) and \
-            (not info.deleted or show_deleted):
-            yield ItemEntity(id, info)
+    ) -> Iterable[Item]:
 
-        curr += 1
+    # Начинаем построение запроса
+    query = db.query(Item)
+    
+    # Фильтр по минимальной цене
+    if min_price != None:
+        query = query.filter(Item.price >= min_price)
+    
+    # Фильтр по максимальной цене
+    if max_price != None:
+        query = query.filter(Item.price <= max_price)
+    
+    # Фильтр по удаленным товарам
+    if not show_deleted:
+        query = query.filter(Item.deleted == False)
+    # Если show_deleted=True, показываем все товары включая удаленные
+    
+    # Применяем пагинацию
+    items = query.offset(offset).limit(limit).all()
+    
+    return items
 
 
-def update_item(id: int, info: ItemInfo) -> ItemEntity | None:
-    if id not in _items_data:
+def update_item(db: Session, id: int, name: str, price: float, deleted: bool) -> Item | None:
+    orm_item = get_item(db, id)
+
+    if orm_item == None:
         return None
 
-    _items_data[id] = info
+    orm_item.name = name
+    orm_item.price = price
+    orm_item.deleted = deleted
 
-    return ItemEntity(id=id, info=info)
+    db.commit()
+    db.refresh(orm_item)
+
+    return orm_item
 
 
-def upsert_item(id: int, info: ItemInfo) -> ItemEntity:
-    _items_data[id] = info
+# def upsert_item(id: int, info: ItemInfo) -> ItemEntity:
+#     _items_data[id] = info
 
-    return ItemEntity(id=id, info=info)
+#     return ItemEntity(id=id, info=info)
 
 
-def patch_item(id: int, patch_info: PatchItemInfo) -> ItemEntity | None:
-    if id not in _items_data:
+def patch_item(db: Session, id: int, name: str | None, price: float | None) -> Item | None:
+    orm_item = get_item(db, id)
+
+    if orm_item == None:
         return None
+    
+    if name is not None:
+        orm_item.name = name
 
-    if patch_info.name is not None:
-        _items_data[id].name = patch_info.name
-
-    if patch_info.price is not None:
-        _items_data[id].price = patch_info.price
-
-    return ItemEntity(id=id, info=_items_data[id])
+    if price is not None:
+        orm_item.price = price
+    
+    db.commit()
+    db.refresh(orm_item)
+    return orm_item
 
 
 def get_carts(
+        db: Session,
         offset: int = 0, 
         limit: int = 10, 
         min_price: float | None = None,
         max_price: float | None = None,
         min_quantity: int | None = None,
         max_quantity: int | None = None
-    ) -> Iterable[CartEntity]:
-    curr = 0
-    for id, info in _carts_data.items():
-        cart_items_quantity = 0
-        for cart_item in info.items:
-            cart_items_quantity += cart_item.quantity
-        if (offset <= curr < offset + limit) and \
-            (min_price == None or info.price >= min_price) and \
-            (max_price == None or info.price <= max_price) and \
-            (min_quantity == None or cart_items_quantity >= min_quantity) and \
-            (max_quantity == None or cart_items_quantity <= max_quantity):
-            yield CartEntity(id, info)
-
-        curr += 1
-
-
-
-def get_cart(id: int) -> CartEntity | None:
-    if id not in _carts_data:
-        return None
-
-    return CartEntity(id=id, info=_carts_data[id])
-
-
-def add_cart() -> CartEntity:
-    _id = next(_cart_id_generator)
-    info = CartInfo(items=[], price=0.0)
-    _carts_data[_id] = info
-    return CartEntity(_id, info)
-
-
-def add_item_to_cart(cart_id: int, item_id: int) -> CartEntity:
-    is_found_item = False
-    item_info = _items_data[item_id]
-    for cart_item in _carts_data[cart_id].items:
-        if cart_item.id == item_id:
-            cart_item.quantity += 1
-            is_found_item = True
-            break
-    if not is_found_item:
-        _carts_data[cart_id].items.append(CartItemInfo(id=item_id, name=item_info.name, quantity=1, available=not item_info.deleted))
+    ) -> Iterable[Cart]:
+    # Начинаем построение запроса
+    query = db.query(Cart)
     
-    _carts_data[cart_id].price += item_info.price
+    # Фильтр по минимальной цене
+    if min_price != None:
+        query = query.filter(Cart.price >= min_price)
+    
+    # Фильтр по максимальной цене
+    if max_price != None:
+        query = query.filter(Cart.price <= max_price)
+    
+    # Фильтр по минимальному количеству товаров
+    if min_quantity != None:
+        query = query.filter(Cart.quantity >= min_quantity)
+    
+    # Фильтр по максимальному количеству товаров
+    if max_quantity != None:
+        query = query.filter(Cart.quantity <= max_quantity)
+    
+    # Применяем пагинацию
+    items = query.offset(offset).limit(limit).all()
+    
+    return items
 
-    return get_cart(cart_id)
+
+
+def get_cart(db: Session, id: int) -> Cart | None:
+    return db.query(Cart).filter(Cart.id == id).first()
+
+
+def add_cart(db: Session) -> Cart:
+    orm_cart = Cart()
+    db.add(orm_cart)
+    db.commit()
+    db.refresh(orm_cart)
+    return orm_cart
+
+
+def add_item_to_cart(db: Session, cart: Cart, item: Item) -> Cart:
+    
+    # Проверяем, есть ли уже этот товар в корзине
+    existing_cart_item = db.query(CartItem).filter(
+        CartItem.cart_id == cart.id,
+        CartItem.item_id == item.id
+    ).first()
+    
+    if existing_cart_item:
+        # Если товар уже есть - увеличиваем количество
+        existing_cart_item.quantity += 1
+        cart_item = existing_cart_item
+    else:
+        # Если товара нет - создаем новую запись
+        cart_item = CartItem(cart_id=cart.id, item_id=item.id, quantity=1)
+        db.add(cart_item)
+    
+    db.commit()
+    db.refresh(cart)
+    
+    return cart

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
+from typing import Optional
 
 from shop_api.store.models import (
-    ItemInfo,
-    ItemEntity,
-    PatchItemInfo
+    Item
 )
+
 
 
 class ItemResponse(BaseModel):
@@ -15,31 +15,40 @@ class ItemResponse(BaseModel):
     price: float
     deleted: bool
 
+
+class ItemMapper:
+    """Маппер для преобразования между ItemResponse и Item (ORM)"""
+
     @staticmethod
-    def from_entity(entity: ItemEntity) -> ItemResponse:
+    def to_domain(orm_item: Item) -> ItemResponse:
+        """Преобразование ORM модели в доменную"""
         return ItemResponse(
-            id=entity.id,
-            name=entity.info.name,
-            price=entity.info.price,
-            deleted=entity.info.deleted,
+            id=orm_item.id,
+            name=orm_item.name,
+            price=orm_item.price,
+            deleted=orm_item.deleted
         )
+
+    @staticmethod
+    def to_orm(
+        domain_item: ItemRequest,
+        orm_item: Optional[Item] = None,
+    ) -> Item:
+        """Преобразование доменной модели в ORM"""
+        if orm_item is None:
+            orm_item = Item()
+
+        orm_item.name = domain_item.name
+        orm_item.price = domain_item.price
+        orm_item.deleted = domain_item.deleted
+
+        return orm_item
 
 
 class ItemRequest(BaseModel):
     name: str
     price: float
     deleted: bool = False
-
-    def as_item_info(self) -> ItemInfo:
-        return ItemInfo(name=self.name, price=self.price, deleted=self.deleted)
-
-
-# class PutItemRequest(BaseModel):
-#     name: str
-#     price: float
-
-#     def as_item_info(self) -> ItemInfo:
-#         return ItemInfo(name=self.name, price=self.price, deleted=self.deleted)
     
 
 class PatchItemRequest(BaseModel):
@@ -48,5 +57,3 @@ class PatchItemRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    def as_patch_item_info(self) -> PatchItemInfo:
-        return PatchItemInfo(name=self.name, price=self.price)

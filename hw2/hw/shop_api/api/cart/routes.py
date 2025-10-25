@@ -1,13 +1,15 @@
 from http import HTTPStatus
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from pydantic import NonNegativeInt, PositiveInt, NonNegativeFloat
+from sqlalchemy.orm import Session
 
 from shop_api import store
 
 from .contracts import (
-    CartResponse
+    CartResponse,
+    CartMapper
 )
 
 cart_router = APIRouter(prefix="/cart")
@@ -20,9 +22,10 @@ async def get_cart_list(
     min_price: Annotated[NonNegativeFloat | None, Query()] = None,
     max_price: Annotated[NonNegativeFloat | None, Query()] = None,
     min_quantity: Annotated[NonNegativeInt | None, Query()] = None,
-    max_quantity: Annotated[NonNegativeInt | None, Query()] = None
+    max_quantity: Annotated[NonNegativeInt | None, Query()] = None,
+    db: Session = Depends(store.get_db)
 ) -> list[CartResponse]:
-    return [CartResponse.from_entity(e) for e in store.get_carts(offset, limit, min_price, max_price, min_quantity, max_quantity)]
+    return [CartMapper.to_domain(orm_cart) for orm_cart in store.get_carts(db, offset, limit, min_price, max_price, min_quantity, max_quantity)]
 
 
 @cart_router.get(
@@ -36,53 +39,53 @@ async def get_cart_list(
         },
     },
 )
-async def get_cart_by_id(id: int) -> CartResponse:
-    entity = store.get_cart(id)
+async def get_cart_by_id(id: int, db: Session = Depends(store.get_db)) -> CartResponse:
+    orm_cart = store.get_cart(db, id)
 
-    if not entity:
+    if not orm_cart:
         raise HTTPException(
             HTTPStatus.NOT_FOUND,
             f"Request resource /cart/{id} was not found",
         )
     
-    return CartResponse.from_entity(entity)
+    return CartMapper.to_domain(orm_cart)
 
 
 @cart_router.post(
     "/",
     status_code=HTTPStatus.CREATED,
 )
-async def post_cart(response: Response) -> CartResponse:
-    entity = store.add_cart()
+async def post_cart(response: Response, db: Session = Depends(store.get_db)) -> CartResponse:
+    orm_cart = store.add_cart(db)
 
     # as REST states one should provide uri to newly created resource in location header
-    response.headers["location"] = f"/cart/{entity.id}"
+    response.headers["location"] = f"/cart/{orm_cart.id}"
 
-    return CartResponse.from_entity(entity)
+    return CartMapper.to_domain(orm_cart)
 
 
 @cart_router.post(
     "/{cart_id}/add/{item_id}",
     status_code=HTTPStatus.CREATED,
 )
-async def post_cart_item(cart_id: int, item_id: int) -> CartResponse:
-    entity_cart = store.get_cart(cart_id)
+async def post_cart_item(cart_id: int, item_id: int, db: Session = Depends(store.get_db)) -> CartResponse:
+    orm_cart = store.get_cart(db, cart_id)
 
-    if not entity_cart:
+    if not orm_cart:
         raise HTTPException(
             HTTPStatus.NOT_FOUND,
             f"Request resource /cart/{cart_id} was not found",
         )
     
 
-    entity_item = store.get_item(item_id)
+    orm_item = store.get_item(db, item_id)
 
-    if not entity_item:
+    if not orm_item:
         raise HTTPException(
             HTTPStatus.NOT_FOUND,
             f"Request resource /item/{item_id} was not found",
         )
  
-    ret_entity_cart = store.add_item_to_cart(cart_id=cart_id, item_id=item_id)
+    ret_orm_cart = store.add_item_to_cart(db, orm_cart, orm_item)
 
-    return CartResponse.from_entity(ret_entity_cart)
+    return CartMapper.to_domain(ret_orm_cart)

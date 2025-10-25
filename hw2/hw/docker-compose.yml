@@ -8,8 +8,16 @@ services:
       dockerfile: ./Dockerfile
       target: local
     restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: hw4_db
     ports:
       - 8080:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   grafana:
     image: grafana/grafana:latest
@@ -29,3 +37,23 @@ services:
     ports:
       - 9090:9090
     restart: always
+
+  postgres:
+    image: postgres:15
+    container_name: hw4_postgres
+    environment:
+      POSTGRES_DB: hw4_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
