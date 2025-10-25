@@ -2,15 +2,28 @@ from http import HTTPStatus
 from typing import Any
 from uuid import uuid4
 
+import os
+os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+
 import pytest
 from faker import Faker
 from fastapi.testclient import TestClient
 
-from .shop_api.test_on_file import app
+from .shop_api.test_on_file import app, Base, engine
+
+
+Base.metadata.create_all(bind=engine)
 
 client = TestClient(app)
 faker = Faker()
 
+
+@pytest.fixture(autouse=False) 
+def clear_db():
+    yield
+    with engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            conn.execute(table.delete())
 
 @pytest.fixture()
 def existing_empty_cart_id() -> int:
