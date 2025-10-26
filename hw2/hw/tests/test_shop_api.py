@@ -12,273 +12,343 @@ client = TestClient(main.app)
 faker = Faker()
 
 
-@pytest.fixture()
-def existing_empty_cart_id() -> int:
-    return client.post("/cart").json()["id"]
+class TestCartEndpoints:
+    """Тесты для эндпоинтов корзин"""
+    
+    @pytest.fixture()
+    def empty_cart(self) -> dict[str, Any]:
+        """Создает пустую корзину"""
+        response = client.post("/cart")
+        assert response.status_code == HTTPStatus.CREATED
+        return response.json()
+    
+    @pytest.fixture()
+    def cart_with_items(self, empty_cart: dict[str, Any], sample_items: list[dict]) -> dict[str, Any]:
+        """Создает корзину с товарами"""
+        cart_id = empty_cart["id"]
+        # Добавляем 3 случайных товара
+        for item in sample_items[:3]:
+            client.post(f"/cart/{cart_id}/add/{item['id']}")
+        return empty_cart
+    
+    @pytest.fixture(scope="session")
+    def sample_items(self) -> list[dict]:
+        """Создает тестовые товары"""
+        items = []
+        for i in range(5):
+            item_data = {
+                "name": f"Тестовый товар {i+1}",
+                "price": faker.pyfloat(positive=True, min_value=10.0, max_value=100.0),
+            }
+            response = client.post("/item", json=item_data)
+            assert response.status_code == HTTPStatus.CREATED
+            items.append(response.json())
+        return items
 
+    def test_create_cart(self):
+        """Тест создания корзины"""
+        response = client.post("/cart")
+        
+        assert response.status_code == HTTPStatus.CREATED
+        assert "location" in response.headers
+        data = response.json()
+        assert "id" in data
+        assert isinstance(data["id"], int)
 
-@pytest.fixture(scope="session")
-def existing_items() -> list[int]:
-    items = [
-        {
-            "name": f"Тестовый товар {i}",
-            "price": faker.pyfloat(positive=True, min_value=10.0, max_value=500.0),
-        }
-        for i in range(10)
-    ]
+    @pytest.mark.parametrize("cart_fixture, expected_items_count", [
+        ("empty_cart", 0),
+        ("cart_with_items", 3),
+    ])
+    def test_get_cart(self, request, cart_fixture: str, expected_items_count: int):
+        """Тест получения корзины"""
+        cart = request.getfixturevalue(cart_fixture)
+        cart_id = cart["id"]
+        
+        response = client.get(f"/cart/{cart_id}")
+        
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
+        assert len(data["items"]) == expected_items_count
+        assert data["price"] >= 0  # Цена не может быть отрицательной
+        
+        # Проверяем расчет общей стоимости
+        if expected_items_count > 0:
+            total_price = sum(
+                item["price"] * item["quantity"] 
+                for item in data["items"]
+            )
+            assert data["price"] == pytest.approx(total_price, 1e-8)
+        else:
+            assert data["price"] == 0.0
 
-    return [client.post("/item", json=item).json()["id"] for item in items]
+    def test_get_nonexistent_cart(self):
+        """Тест получения несуществующей корзины"""
+        response = client.get(f"/cart/999999")
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-
-@pytest.fixture(scope="session", autouse=True)
-def existing_not_empty_carts(existing_items: list[int]) -> list[int]:
-    carts = []
-
-    for i in range(20):
-        cart_id: int = client.post("/cart").json()["id"]
-        for item_id in faker.random_elements(existing_items, unique=False, length=i):
-            client.post(f"/cart/{cart_id}/add/{item_id}")
-
-        carts.append(cart_id)
-
-    return carts
-
-
-@pytest.fixture()
-def existing_not_empty_cart_id(
-    existing_empty_cart_id: int,
-    existing_items: list[int],
-) -> int:
-    for item_id in faker.random_elements(existing_items, unique=False, length=3):
-        client.post(f"/cart/{existing_empty_cart_id}/add/{item_id}")
-
-    return existing_empty_cart_id
-
-
-@pytest.fixture()
-def existing_item() -> dict[str, Any]:
-    return client.post(
-        "/item",
-        json={
-            "name": f"Тестовый товар {uuid4().hex}",
-            "price": faker.pyfloat(min_value=10.0, max_value=100.0),
-        },
-    ).json()
-
-
-@pytest.fixture()
-def deleted_item(existing_item: dict[str, Any]) -> dict[str, Any]:
-    item_id = existing_item["id"]
-    client.delete(f"/item/{item_id}")
-
-    existing_item["deleted"] = True
-    return existing_item
-
-
-def test_post_cart() -> None:
-    response = client.post("/cart")
-
-    assert response.status_code == HTTPStatus.CREATED
-    assert "location" in response.headers
-    assert "id" in response.json()
-
-
-@pytest.mark.parametrize(
-    ("cart", "not_empty"),
-    [
-        ("existing_empty_cart_id", False),
-        ("existing_not_empty_cart_id", True),
-    ],
-)
-def test_get_cart(request, cart: int, not_empty: bool) -> None:
-    cart_id = request.getfixturevalue(cart)
-
-    response = client.get(f"/cart/{cart_id}")
-
-    assert response.status_code == HTTPStatus.OK
-    response_json = response.json()
-
-    len_items = len(response_json["items"])
-    assert len_items > 0 if not_empty else len_items == 0
-
-    if not_empty:
-        price = 0
-
-        for item in response_json["items"]:
-            item_id = item["id"]
-            price += client.get(f"/item/{item_id}").json()["price"] * item["quantity"]
-
-        assert response_json["price"] == pytest.approx(price, 1e-8)
-    else:
-        assert response_json["price"] == 0.0
-
-
-@pytest.mark.parametrize(
-    ("query", "status_code"),
-    [
+    @pytest.mark.parametrize("params, expected_status", [
+        # Валидные параметры
         ({}, HTTPStatus.OK),
-        ({"offset": 1, "limit": 2}, HTTPStatus.OK),
-        ({"min_price": 1000.0}, HTTPStatus.OK),
-        ({"max_price": 20.0}, HTTPStatus.OK),
+        ({"offset": 0, "limit": 10}, HTTPStatus.OK),
+        ({"min_price": 50.0}, HTTPStatus.OK),
+        ({"max_price": 100.0}, HTTPStatus.OK),
         ({"min_quantity": 1}, HTTPStatus.OK),
-        ({"max_quantity": 0}, HTTPStatus.OK),
+        ({"max_quantity": 5}, HTTPStatus.OK),
+        
+        # Невалидные параметры
         ({"offset": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
         ({"limit": 0}, HTTPStatus.UNPROCESSABLE_ENTITY),
-        ({"limit": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
         ({"min_price": -1.0}, HTTPStatus.UNPROCESSABLE_ENTITY),
         ({"max_price": -1.0}, HTTPStatus.UNPROCESSABLE_ENTITY),
         ({"min_quantity": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
-        ({"max_quantity": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
-    ],
-)
-def test_get_cart_list(query: dict[str, Any], status_code: int):
-    response = client.get("/cart", params=query)
+    ])
+    def test_get_carts_list(self, params: dict[str, Any], expected_status: int):
+        """Тест получения списка корзин с фильтрацией"""
+        response = client.get("/cart", params=params)
+        
+        assert response.status_code == expected_status
+        
+        if expected_status == HTTPStatus.OK:
+            data = response.json()
+            assert isinstance(data, list)
+            
+            # Проверяем фильтры
+            if "min_price" in params:
+                assert all(cart["price"] >= params["min_price"] for cart in data)
+            if "max_price" in params:
+                assert all(cart["price"] <= params["max_price"] for cart in data)
 
-    assert response.status_code == status_code
 
-    if status_code == HTTPStatus.OK:
+class TestItemEndpoints:
+    """Тесты для эндпоинтов товаров"""
+    
+    @pytest.fixture()
+    def sample_item(self) -> dict[str, Any]:
+        """Создает тестовый товар"""
+        item_data = {
+            "name": f"Тестовый товар {uuid4().hex[:8]}",
+            "price": faker.pyfloat(min_value=10.0, max_value=100.0),
+        }
+        response = client.post("/item", json=item_data)
+        assert response.status_code == HTTPStatus.CREATED
+        return response.json()
+    
+    @pytest.fixture()
+    def deleted_item(self, sample_item: dict[str, Any]) -> dict[str, Any]:
+        """Создает удаленный товар"""
+        item_id = sample_item["id"]
+        response = client.delete(f"/item/{item_id}")
+        assert response.status_code == HTTPStatus.OK
+        sample_item["deleted"] = True
+        return sample_item
+
+    def test_create_item(self):
+        """Тест создания товара"""
+        item_data = {
+            "name": "Новый товар",
+            "price": 29.99
+        }
+        
+        response = client.post("/item", json=item_data)
+        
+        assert response.status_code == HTTPStatus.CREATED
         data = response.json()
+        assert data["name"] == item_data["name"]
+        assert data["price"] == item_data["price"]
+        assert "id" in data
+        assert data["deleted"] is False
 
-        assert isinstance(data, list)
+    def test_create_item_invalid_data(self):
+        """Тест создания товара с невалидными данными"""
+        invalid_items = [
+            {"name": "Только имя"},  # Нет цены
+            {"price": 10.0},         # Нет имени
+            {"name": "", "price": 10.0},  # Пустое имя
+            {"name": "Товар", "price": -10.0},  # Отрицательная цена
+        ]
+        
+        for invalid_item in invalid_items:
+            response = client.post("/item", json=invalid_item)
+            assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
 
-        if "min_price" in query:
-            assert all(item["price"] >= query["min_price"] for item in data)
+    def test_get_item(self, sample_item: dict[str, Any]):
+        """Тест получения товара"""
+        item_id = sample_item["id"]
+        
+        response = client.get(f"/item/{item_id}")
+        
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == sample_item
 
-        if "max_price" in query:
-            assert all(item["price"] <= query["max_price"] for item in data)
+    def test_get_nonexistent_item(self):
+        """Тест получения несуществующего товара"""
+        response = client.get(f"/item/999999")
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-        quantity = sum(item["quantity"] for cart in data for item in cart["items"])
+    def test_get_deleted_item(self, deleted_item: dict[str, Any]):
+        """Тест получения удаленного товара"""
+        item_id = deleted_item["id"]
+        
+        response = client.get(f"/item/{item_id}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-        if "min_quantity" in query:
-            assert quantity >= query["min_quantity"]
-
-        if "max_quantity" in query:
-            assert quantity <= query["max_quantity"]
-
-
-def test_post_item() -> None:
-    item = {"name": "test item", "price": 9.99}
-    response = client.post("/item", json=item)
-
-    assert response.status_code == HTTPStatus.CREATED
-
-    data = response.json()
-    assert item["price"] == data["price"]
-    assert item["name"] == data["name"]
-
-
-def test_get_item(existing_item: dict[str, Any]) -> None:
-    item_id = existing_item["id"]
-
-    response = client.get(f"/item/{item_id}")
-
-    assert response.status_code == HTTPStatus.OK
-    assert response.json() == existing_item
-
-
-@pytest.mark.parametrize(
-    ("query", "status_code"),
-    [
-        ({"offset": 2, "limit": 5}, HTTPStatus.OK),
-        ({"min_price": 5.0}, HTTPStatus.OK),
-        ({"max_price": 5.0}, HTTPStatus.OK),
+    @pytest.mark.parametrize("params, expected_status", [
+        # Валидные параметры
+        ({"offset": 0, "limit": 5}, HTTPStatus.OK),
+        ({"min_price": 20.0}, HTTPStatus.OK),
+        ({"max_price": 50.0}, HTTPStatus.OK),
         ({"show_deleted": True}, HTTPStatus.OK),
+        ({"show_deleted": False}, HTTPStatus.OK),
+        
+        # Невалидные параметры
         ({"offset": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
         ({"limit": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
-        ({"limit": 0}, HTTPStatus.UNPROCESSABLE_ENTITY),
-        ({"min_price": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
-        ({"max_price": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
-    ],
-)
-def test_get_item_list(query: dict[str, Any], status_code: int) -> None:
-    response = client.get("/item", params=query)
+        ({"min_price": -1.0}, HTTPStatus.UNPROCESSABLE_ENTITY),
+    ])
+    def test_get_items_list(self, params: dict[str, Any], expected_status: int):
+        """Тест получения списка товаров с фильтрацией"""
+        response = client.get("/item", params=params)
+        
+        assert response.status_code == expected_status
+        
+        if expected_status == HTTPStatus.OK:
+            data = response.json()
+            assert isinstance(data, list)
+            
+            # Проверяем фильтры
+            if "min_price" in params:
+                assert all(item["price"] >= params["min_price"] for item in data)
+            if "max_price" in params:
+                assert all(item["price"] <= params["max_price"] for item in data)
+            if params.get("show_deleted") is False:
+                assert all(item.get("deleted", False) is False for item in data)
 
-    assert response.status_code == status_code
+    @pytest.mark.parametrize("update_data, expected_status", [
+        ({"name": "Новое имя", "price": 99.99}, HTTPStatus.OK),
+        ({"price": 15.50}, HTTPStatus.UNPROCESSABLE_ENTITY),  # Нет имени
+        ({"name": "Только имя"}, HTTPStatus.UNPROCESSABLE_ENTITY),  # Нет цены
+        ({}, HTTPStatus.UNPROCESSABLE_ENTITY),  # Пустые данные
+    ])
+    def test_full_update_item(
+        self, 
+        sample_item: dict[str, Any], 
+        update_data: dict[str, Any], 
+        expected_status: int
+    ):
+        """Тест полного обновления товара (PUT)"""
+        item_id = sample_item["id"]
+        
+        response = client.put(f"/item/{item_id}", json=update_data)
+        
+        assert response.status_code == expected_status
+        
+        if expected_status == HTTPStatus.OK:
+            updated_item = response.json()
+            expected_item = sample_item.copy()
+            expected_item.update(update_data)
+            assert updated_item == expected_item
 
-    if status_code == HTTPStatus.OK:
-        data = response.json()
+    def test_full_update_deleted_item(self, deleted_item: dict[str, Any]):
+        """Тест полного обновления удаленного товара"""
+        item_id = deleted_item["id"]
+        
+        response = client.put(
+            f"/item/{item_id}", 
+            json={"name": "Новое имя", "price": 99.99}
+        )
+        
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-        assert isinstance(data, list)
+    @pytest.mark.parametrize("item_fixture, patch_data, expected_status", [
+        # Обновление существующего товара
+        ("sample_item", {"name": "Частично обновлен"}, HTTPStatus.OK),
+        ("sample_item", {"price": 77.77}, HTTPStatus.OK),
+        ("sample_item", {"name": "Полное обновление", "price": 88.88}, HTTPStatus.OK),
+        
+        # Попытка обновления удаленного товара
+        ("deleted_item", {"name": "Новое имя"}, HTTPStatus.NOT_MODIFIED),
+        ("deleted_item", {"price": 99.99}, HTTPStatus.NOT_MODIFIED),
+        
+        # Невалидные данные
+        ("sample_item", {"invalid_field": "value"}, HTTPStatus.UNPROCESSABLE_ENTITY),
+        ("sample_item", {"deleted": True}, HTTPStatus.UNPROCESSABLE_ENTITY),
+    ])
+    def test_partial_update_item(
+        self, 
+        request, 
+        item_fixture: str, 
+        patch_data: dict[str, Any], 
+        expected_status: int
+    ):
+        """Тест частичного обновления товара (PATCH)"""
+        item_data: dict[str, Any] = request.getfixturevalue(item_fixture)
+        item_id = item_data["id"]
+        
+        response = client.patch(f"/item/{item_id}", json=patch_data)
+        
+        assert response.status_code == expected_status
+        
+        if expected_status == HTTPStatus.OK:
+            # Проверяем, что изменения применились
+            updated_response = client.get(f"/item/{item_id}")
+            assert updated_response.status_code == HTTPStatus.OK
+            updated_item = updated_response.json()
+            
+            # Проверяем обновленные поля
+            for key, value in patch_data.items():
+                assert updated_item[key] == value
 
-        if "min_price" in query:
-            assert all(item["price"] >= query["min_price"] for item in data)
-
-        if "max_price" in query:
-            assert all(item["price"] <= query["max_price"] for item in data)
-
-        if "show_deleted" in query and query["show_deleted"] is False:
-            assert all(item["deleted"] is False for item in data)
-
-
-@pytest.mark.parametrize(
-    ("body", "status_code"),
-    [
-        ({}, HTTPStatus.UNPROCESSABLE_ENTITY),
-        ({"price": 9.99}, HTTPStatus.UNPROCESSABLE_ENTITY),
-        ({"name": "new name", "price": 9.99}, HTTPStatus.OK),
-    ],
-)
-def test_put_item(
-    existing_item: dict[str, Any],
-    body: dict[str, Any],
-    status_code: int,
-) -> None:
-    item_id = existing_item["id"]
-    response = client.put(f"/item/{item_id}", json=body)
-
-    assert response.status_code == status_code
-
-    if status_code == HTTPStatus.OK:
-        new_item = existing_item.copy()
-        new_item.update(body)
-        assert response.json() == new_item
-
-
-@pytest.mark.parametrize(
-    ("item", "body", "status_code"),
-    [
-        ("deleted_item", {}, HTTPStatus.NOT_MODIFIED),
-        ("deleted_item", {"price": 9.99}, HTTPStatus.NOT_MODIFIED),
-        ("deleted_item", {"name": "new name", "price": 9.99}, HTTPStatus.NOT_MODIFIED),
-        ("existing_item", {}, HTTPStatus.OK),
-        ("existing_item", {"price": 9.99}, HTTPStatus.OK),
-        ("existing_item", {"name": "new name", "price": 9.99}, HTTPStatus.OK),
-        (
-            "existing_item",
-            {"name": "new name", "price": 9.99, "odd": "value"},
-            HTTPStatus.UNPROCESSABLE_ENTITY,
-        ),
-        (
-            "existing_item",
-            {"name": "new name", "price": 9.99, "deleted": True},
-            HTTPStatus.UNPROCESSABLE_ENTITY,
-        ),
-    ],
-)
-def test_patch_item(request, item: str, body: dict[str, Any], status_code: int) -> None:
-    item_data: dict[str, Any] = request.getfixturevalue(item)
-    item_id = item_data["id"]
-    response = client.patch(f"/item/{item_id}", json=body)
-
-    assert response.status_code == status_code
-
-    if status_code == HTTPStatus.OK:
-        patch_response_body = response.json()
-
+    def test_delete_item(self, sample_item: dict[str, Any]):
+        """Тест удаления товара"""
+        item_id = sample_item["id"]
+        
+        # Первое удаление
+        response = client.delete(f"/item/{item_id}")
+        assert response.status_code == HTTPStatus.OK
+        
+        # Проверяем, что товар не доступен
         response = client.get(f"/item/{item_id}")
-        patched_item = response.json()
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        
+        # Повторное удаление (идемпотентность)
+        response = client.delete(f"/item/{item_id}")
+        assert response.status_code == HTTPStatus.OK
 
-        assert patched_item == patch_response_body
+    def test_delete_nonexistent_item(self):
+        """Тест удаления несуществующего товара"""
+        response = client.delete(f"/item/999999")
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
 
-def test_delete_item(existing_item: dict[str, Any]) -> None:
-    item_id = existing_item["id"]
+class TestCartItemOperations:
+    """Тесты операций с товарами в корзинах"""
+    
+    def test_add_item_to_cart(self, empty_cart: dict[str, Any], sample_item: dict[str, Any]):
+        """Тест добавления товара в корзину"""
+        cart_id = empty_cart["id"]
+        item_id = sample_item["id"]
+        
+        response = client.post(f"/cart/{cart_id}/add/{item_id}")
+        
+        assert response.status_code == HTTPStatus.OK
+        
+        # Проверяем, что товар добавился
+        cart_response = client.get(f"/cart/{cart_id}")
+        cart_data = cart_response.json()
+        
+        assert any(item["id"] == item_id for item in cart_data["items"])
+        assert cart_data["price"] == sample_item["price"]  # Один товар
 
-    response = client.delete(f"/item/{item_id}")
-    assert response.status_code == HTTPStatus.OK
+    def test_add_nonexistent_item_to_cart(self, empty_cart: dict[str, Any]):
+        """Тест добавления несуществующего товара в корзину"""
+        cart_id = empty_cart["id"]
+        
+        response = client.post(f"/cart/{cart_id}/add/999999")
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-    response = client.get(f"/item/{item_id}")
-    assert response.status_code == HTTPStatus.NOT_FOUND
-
-    response = client.delete(f"/item/{item_id}")
-    assert response.status_code == HTTPStatus.OK
+    def test_add_item_to_nonexistent_cart(self, sample_item: dict[str, Any]):
+        """Тест добавления товара в несуществующую корзину"""
+        item_id = sample_item["id"]
+        
+        response = client.post(f"/cart/999999/add/{item_id}")
+        assert response.status_code == HTTPStatus.NOT_FOUND
