@@ -122,6 +122,35 @@ def create_tables():
     cur.close()
     conn.close()
 
+def test_lifespan_tables_created():
+    # Запускаем приложение, lifespan сработает и создаст таблицы
+    with TestClient(app) as client:
+        # Проверяем, что приложение стартовало (например, делаем запрос к эндпоинту)
+        response = client.get("/item/1")
+        assert response.status_code in (200, 404)
+
+        # Дополнительно проверим, что таблицы действительно созданы в базе
+        conn = psycopg2.connect(
+            dbname=os.getenv("POSTGRES_DB"),
+            user=os.getenv("POSTGRES_USER"),
+            password=os.getenv("POSTGRES_PASSWORD"),
+            host=os.getenv("POSTGRES_HOST"),
+            port=os.getenv("POSTGRES_PORT")
+        )
+        cur = conn.cursor()
+        tables = ["items", "carts", "cart_items"]
+        for table in tables:
+            cur.execute(f"""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = '{table}'
+                );
+            """)
+            exists = cur.fetchone()[0]
+            assert exists, f"Table {table} should exist"
+        cur.close()
+        conn.close()
+
 @pytest.fixture()
 def existing_empty_cart_id() -> int:
     return client.post("/cart").json()["id"]
@@ -392,3 +421,56 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+def test_put_item_not_found():
+    with TestClient(app) as client:
+        # id товара, которого нет в базе
+        non_existent_id = 99999
+        data = {
+            "name": "Test",
+            "price": 123.45
+        }
+        response = client.put(f"/item/{non_existent_id}", json=data)
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Item not found"
+
+def test_delete_item_not_found():
+    non_existent_id = 99999
+    response = client.delete(f"/item/{non_existent_id}")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Item not found"
+
+def test_patch_item_not_found():
+    non_existent_id = 99999
+    patch_data = {"name": "new name"}
+    response = client.patch(f"/item/{non_existent_id}", json=patch_data)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Item not found"
+
+
+def test_get_cart_not_found():
+    non_existent_id = 99999
+    response = client.get(f"/cart/{non_existent_id}")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Cart not found"
+
+
+def test_add_item_to_cart_cart_not_found():
+    item_data = {"name": "Test item", "price": 10.0}
+    item_resp = client.post("/item", json=item_data)
+    item_id = item_resp.json()["id"]
+
+    non_existent_cart_id = 99999
+    response = client.post(f"/cart/{non_existent_cart_id}/add/{item_id}")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Cart not found"
+
+
+def test_add_item_to_cart_item_not_found():
+    cart_resp = client.post("/cart")
+    cart_id = cart_resp.json()["id"]
+
+    non_existent_item_id = 99999
+    response = client.post(f"/cart/{cart_id}/add/{non_existent_item_id}")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Item not found or deleted"
