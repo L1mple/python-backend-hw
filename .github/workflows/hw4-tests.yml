@@ -1,10 +1,12 @@
-name: Tests
+name: HW4 Tests
 
 on:
   push:
     branches: [ main, hw-4 ]
+    paths: [ 'hw2/hw/**' ]
   pull_request:
     branches: [ main ]
+    paths: [ 'hw2/hw/**' ]
 
 jobs:
   test:
@@ -24,13 +26,14 @@ jobs:
         enable-cache: true
 
     - name: Install dependencies
+      working-directory: hw2/hw
       run: |
-        uv pip install -r requirements.txt
-        uv pip install pytest-cov
+        uv add -r requirements.txt
 
     - name: Run tests with coverage
+      working-directory: hw2/hw
       env:
-        PYTHONPATH: ${{ github.workspace }}
+        PYTHONPATH: ${{ github.workspace }}/hw2/hw
       run: |
         uv run pytest test-hw/ --cov=shop_api --cov-report=term-missing --cov-report=xml --cov-fail-under=95 -v
 
@@ -38,5 +41,5 @@ jobs:
       uses: codecov/codecov-action@v4
       if: always()
       with:
-        file: ./coverage.xml
+        file: ./hw2/hw/coverage.xml
         fail_ci_if_error: false
