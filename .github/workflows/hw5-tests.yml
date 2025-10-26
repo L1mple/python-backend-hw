@@ -10,7 +10,7 @@ on:
     paths: [ 'hw2/hw/**' ]
 
 jobs:
-  test-hw2:
+  test-hw_4_5:
     runs-on: ubuntu-latest
     
     # Добавляем сервис PostgreSQL
@@ -21,8 +21,6 @@ jobs:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: qwerty
           POSTGRES_DB: shop_db
-        ports:
-          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -51,7 +49,7 @@ jobs:
     # Добавляем ожидание готовности БД
     - name: Wait for Postgres
       run: |
-        until pg_isready -h localhost -p 5432; do sleep 1; done
+        until pg_isready -h postgres -p 5432; do sleep 1; done
 
     - name: Run tests
       working-directory: hw2/hw
@@ -60,7 +58,7 @@ jobs:
         POSTGRES_USER: user
         POSTGRES_PASSWORD: qwerty
         POSTGRES_DB: shop_db
-        POSTGRES_HOST: localhost
+        POSTGRES_HOST: postgres
         POSTGRES_PORT: 5432
       run: |
         pytest test_homework5.py -v
