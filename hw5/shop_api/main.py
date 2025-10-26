@@ -14,9 +14,9 @@ def get_db():
     finally:
         db.close()
 
-DB_HOST = "postgres"
+DB_HOST = "localhost"
 DB_PORT = "5432"
-DB_NAME = "hw4_db"
+DB_NAME = "hw5_db"
 DB_USER = "postgres"
 DB_PASSWORD = "password"
 DATABASE_URL = (
