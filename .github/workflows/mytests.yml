@@ -2,14 +2,13 @@ name: HW2 tests (fork)
 
 on:
   push:
-    branches: [ main, master, dev, hw2, "**" ]
   pull_request:
 
 jobs:
   tests:
     runs-on: ubuntu-latest
 
-    # Все run-скрипты выполняем из папки hw2/hw
+    # все команды запускаем из hw2/hw
     defaults:
       run:
         working-directory: hw2/hw
@@ -31,7 +30,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+psycopg://shop:shop@localhost:5432/shop
-      PYTHONPATH: .   # т.к. рабочая директория = hw2/hw
+      PYTHONPATH: .
 
     steps:
       - name: Checkout
@@ -60,11 +59,23 @@ jobs:
             sleep 1
           done
 
-      # Можно убрать, если не нужно чистить БД перед тестами
-      - name: Reset DB (optional)
+      # 1) создаём схему до truncate (эквивалент твоего Base.metadata.create_all)
+      - name: Init DB schema
         run: |
-          PGPASSWORD=shop psql -h localhost -U shop -d shop -c "TRUNCATE TABLE cart_items, carts, items RESTART IDENTITY CASCADE;" || true
+          python - <<'PY'
+          from shop_api.db import engine, Base
+          from shop_api import models  # важно: регистрирует таблицы
+          Base.metadata.create_all(bind=engine)
+          print("schema OK")
+          PY
 
+      # 2) теперь можно чистить (ID с 1, пустые таблицы)
+      - name: Reset DB
+        run: |
+          PGPASSWORD=shop psql -h localhost -U shop -d shop \
+            -c "TRUNCATE TABLE cart_items, carts, items RESTART IDENTITY CASCADE;"
+
+      # 3) тесты + порог покрытия
       - name: Run tests with coverage gate (>=95%)
         run: |
           pytest -vv \
