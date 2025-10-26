@@ -1,7 +1,4 @@
-version: "3.8"
-
 services:
-
   local:
     build:
       context: .
@@ -25,6 +22,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d mydb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   grafana:
     image: grafana/grafana:latest
@@ -49,6 +51,20 @@ services:
     ports:
       - 9090:9090
     restart: always
+
+  transaction-demo:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: local
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/mydb
+    command: ["python", "-c", "from shop_api.transaction_demo import execute_tests; execute_tests()"]
+    volumes:
+      - .:/app
 
 volumes:
   grafana-data:
