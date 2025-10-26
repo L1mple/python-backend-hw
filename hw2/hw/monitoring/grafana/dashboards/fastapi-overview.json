@@ -1,0 +1,52 @@
+{
+  "id": null,
+  "uid": "fastapi-overview",
+  "title": "FastAPI Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Requests per second by status",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(http_requests_total[1m]))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request duration p95 (s)",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "API target up",
+      "gridPos": {"x": 0, "y": 8, "w": 6, "h": 4},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [
+        {"refId": "C", "expr": "up{job=\"api\"}"}
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Total requests",
+      "gridPos": {"x": 6, "y": 8, "w": 6, "h": 4},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [
+        {"refId": "D", "expr": "sum(http_requests_total)"}
+      ]
+    }
+  ],
+  "templating": {"list": []}
+}
