@@ -37,7 +37,8 @@ def existing_not_empty_carts(existing_items: list[int]) -> list[int]:
     for i in range(20):
         cart_id: int = client.post("/cart").json()["id"]
         for item_id in faker.random_elements(existing_items, unique=False, length=i):
-            client.post(f"/cart/{cart_id}/add/{item_id}")
+            response = client.post(f"/cart/{cart_id}/add/{item_id}")
+            assert response.status_code == HTTPStatus.OK
 
         carts.append(cart_id)
 
@@ -106,7 +107,9 @@ def test_get_cart(request, cart: int, not_empty: bool) -> None:
 
         for item in response_json["items"]:
             item_id = item["id"]
-            price += client.get(f"/item/{item_id}").json()["price"] * item["quantity"]
+            response = client.get(f"/item/{item_id}")
+            assert response.status_code == HTTPStatus.OK
+            price += response.json()["price"] * item["quantity"]
 
         assert response_json["price"] == pytest.approx(price, 1e-8)
     else:

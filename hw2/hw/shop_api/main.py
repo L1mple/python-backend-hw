@@ -1,3 +1,4 @@
+import os
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, status
@@ -7,19 +8,32 @@ from prometheus_client import Counter
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import NonNegativeInt, PositiveInt, NonNegativeFloat, BaseModel
 
-from shop_api.models import CartItem, Cart, Item
-from shop_api.repository import CartNotFoundException, CartsRepository, ItemNotFoundException, ItemsRepository
+from shop_api.models import Cart, Item
+from shop_api.models import CartNotFoundException, ItemNotFoundException
+from shop_api.in_memory_repository import Repository as InMemoryRepository
+from shop_api.postgres_repository import Repository as PostgresRepository
 
-app = FastAPI(title="Shop API")
+
+def get_repository(base: str):
+    if base == 'in-memory':
+        return InMemoryRepository()
+    elif base == 'postgres':
+        return PostgresRepository()
+    raise Exception('Unknown base')
+
+
+repository = get_repository(os.environ.get('SHOP_API_DB_TYPE', 'in-memory'))
+
+app = FastAPI(title='Shop API')
 instrumentator = Instrumentator().instrument(app).expose(app)
 
 
-@app.post("/cart")
+@app.post('/cart')
 async def create_cart():
-    new_cart: Cart = CartsRepository.create_cart()
+    new_cart: Cart = repository.create_cart()
     return JSONResponse(
-        content={"id": new_cart.id},
-        headers={"location": f"/cart/{new_cart.id}"},
+        content={'id': new_cart.id},
+        headers={'location': f'/cart/{new_cart.id}'},
         status_code=status.HTTP_201_CREATED,
     )
 
@@ -27,24 +41,27 @@ async def create_cart():
 test_get_cart_counter = Counter('get_cart_counter', 'Test custum counter')
 
 
-@app.get("/cart/{id}")
+@app.get('/cart/{id}')
 async def get_cart(id: NonNegativeInt):
     test_get_cart_counter.inc()
     try:
-        cart = CartsRepository.get_cart(id)
+        cart = repository.get_cart(id)
     except CartNotFoundException:
-        raise HTTPException(status_code=404, detail="Cart not found")
+        raise HTTPException(status_code=404, detail='Cart not found')
+    except Exception as e:
+        print("Unexpected internal error: ", e)
+        raise HTTPException(status_code=500, detail='Internal server error')
     return cart
 
 
-@app.get("/cart")
+@app.get('/cart')
 async def get_carts(offset: NonNegativeInt = 0,
                     limit: PositiveInt = 10,
                     min_price: Optional[NonNegativeFloat] = None,
                     max_price: Optional[NonNegativeFloat] = None,
                     min_quantity: Optional[NonNegativeInt] = None,
                     max_quantity: Optional[NonNegativeInt] = None):
-    carts: List[Cart] = CartsRepository.get_carts(offset, limit)
+    carts: List[Cart] = repository.get_carts(offset, limit)
     result = []
     for cart in carts:
         if min_price is not None and cart.price < min_price:
@@ -63,31 +80,17 @@ async def get_carts(offset: NonNegativeInt = 0,
     return result
 
 
-@app.post("/cart/{cart_id}/add/{item_id}")
+@app.post('/cart/{cart_id}/add/{item_id}')
 async def add_item_to_cart(cart_id: NonNegativeInt, item_id: NonNegativeInt):
     try:
-        cart: Cart = CartsRepository.get_cart(cart_id)
+        cart: Cart = repository.add_item_to_cart(cart_id, item_id)
     except CartNotFoundException:
-        raise HTTPException(status_code=404, detail="Cart not found")
-    
-    try:
-        item: Item = ItemsRepository.get_item(item_id)
+        raise HTTPException(status_code=404, detail='Cart not found')
     except ItemNotFoundException:
-        raise HTTPException(status_code=404, detail="Item not found")
-    
-    for cart_item in cart.items:
-        if cart_item.id == item.id:
-            cart_item.quantity += 1
-            break
-    else:
-        cart.items.append(CartItem(id=item.id, name=item.name, quantity=1,
-                                   available=not item.deleted))
-    cart.price += item.price
-
-    try:    
-        CartsRepository.update_cart(cart)
-    except CartNotFoundException:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=404, detail='Item not found')
+    except Exception as e:
+        print("Unexpected internal error: ", e)
+        raise HTTPException(status_code=500, detail='Internal server errorss')
         
 
 class CreateItemRequestBody(BaseModel):
@@ -95,32 +98,35 @@ class CreateItemRequestBody(BaseModel):
     price: float
 
 
-@app.post("/item", status_code=201)
+@app.post('/item', status_code=201)
 async def create_item(body: CreateItemRequestBody):
-    new_item: Item = ItemsRepository.create_item(name=body.name, price=body.price)
+    new_item: Item = repository.create_item(name=body.name, price=body.price)
     return JSONResponse(
         content=jsonable_encoder(new_item),
-        headers={"location": f"/item/{new_item.id}"},
+        headers={'location': f'/item/{new_item.id}'},
         status_code=status.HTTP_201_CREATED,
     )
 
 
-@app.get("/item/{id}")
+@app.get('/item/{id}')
 async def get_item(id: NonNegativeInt):
     try:
-        item: Item = ItemsRepository.get_item(id)
+        item: Item = repository.get_item(id)
     except ItemNotFoundException:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail='Item not found')
+    except Exception as e:
+        print("Unexpected internal error: ", e)
+        raise HTTPException(status_code=500, detail='Internal server error')
     return item
 
 
-@app.get("/item")
+@app.get('/item')
 async def get_items(offset: NonNegativeInt = 0,
                     limit: PositiveInt = 10,
                     min_price: Optional[NonNegativeFloat] = None,
                     max_price: Optional[NonNegativeFloat] = None,
                     show_deleted: bool = False):
-    items: List[Item] = ItemsRepository.get_items(offset, limit)
+    items: List[Item] = repository.get_items(offset, limit)
     result = []
     for item in items:
         if min_price is not None and item.price < min_price:
@@ -140,35 +146,41 @@ class ReplaceItemRequestBody(BaseModel):
     price: float
 
 
-@app.put("/item/{id}")
+@app.put('/item/{id}')
 async def replace_item(id: NonNegativeInt, body: ReplaceItemRequestBody):
     try:
-        item: Item = ItemsRepository.replace_item(item_id=id, name=body.name, price=body.price)
+        item: Item = repository.replace_item(item_id=id, name=body.name, price=body.price)
     except ItemNotFoundException:                                                    
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail='Item not found')
+    except Exception as e:
+        print("Unexpected internal error: ", e)
+        raise HTTPException(status_code=500, detail='Internal server error')
     return item
 
 
 class UpdateItemRequestBody(BaseModel):
-    model_config = {"extra": "forbid"}
+    model_config = {'extra': 'forbid'}
 
     name: Optional[str] = None
     price: Optional[float] = None
 
 
-@app.patch("/item/{id}")
+@app.patch('/item/{id}')
 async def update_item(id: NonNegativeInt, body: UpdateItemRequestBody):
     try:
-        updated_item: Optional[Item] = ItemsRepository.update_item(
+        updated_item: Optional[Item] = repository.update_item(
             item_id=id, name=body.name, price=body.price)
     except ItemNotFoundException:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail='Item not found')
+    except Exception as e:
+        print("Unexpected internal error: ", e)
+        raise HTTPException(status_code=500, detail='Internal server error')
     
     if not updated_item:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED)
     return updated_item
 
 
-@app.delete("/item/{id}")
+@app.delete('/item/{id}')
 async def delete_item(id: NonNegativeInt):
-    ItemsRepository.delete_item(item_id=id)
+    repository.delete_item(item_id=id)

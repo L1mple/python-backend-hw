@@ -3,6 +3,8 @@ fastapi>=0.117.1
 uvicorn>=0.24.0
 prometheus-client
 prometheus-fastapi-instrumentator
+SQLAlchemy
+psycopg2
 
 # Зависимости для тестирования
 pytest>=7.4.0

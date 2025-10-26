@@ -19,3 +19,9 @@ class Item(BaseModel):
     name: str
     price: float
     deleted: bool
+
+class CartNotFoundException(Exception):
+    pass
+
+class ItemNotFoundException(Exception):
+    pass
