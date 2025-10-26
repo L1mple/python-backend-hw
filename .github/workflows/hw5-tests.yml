@@ -1,0 +1,53 @@
+name: "HW5 Tests"
+
+on:
+  pull_request:
+    branches: [ main, hw5 ]
+    paths: [ 'hw5/**' ]
+  push:
+    branches: [ main, hw5 ]
+    paths: [ 'hw5/**' ]
+
+jobs:
+  test-hw5:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: hw5_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      working-directory: hw5
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests
+      working-directory: hw5
+      env:
+        PYTHONPATH: ${{ github.workspace }}/hw5
+      run: |
+        pytest -vv --cov=hw5/ ./hw5/tests
