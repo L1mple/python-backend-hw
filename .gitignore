@@ -132,3 +132,4 @@ dmypy.json
 
 # macOS
 .DS_Store
+/hw4/settings/

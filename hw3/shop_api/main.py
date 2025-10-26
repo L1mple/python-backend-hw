@@ -1,7 +1,10 @@
 from fastapi import FastAPI, Response, HTTPException, status
 from pydantic import BaseModel, conint, confloat
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
+
 cart_id_counter = 0
 item_id_counter = 0
 
