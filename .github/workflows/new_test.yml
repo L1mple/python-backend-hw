@@ -28,12 +28,12 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5  # Обновлено до v5
       with:
         python-version: ${{ matrix.python-version }}
     
     - name: Cache pip dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4  # Обновлено до v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('hw2/hw/requirements.txt') }}
@@ -61,15 +61,16 @@ jobs:
         pytest --cov=shop_api --cov-report=xml --cov-report=term-missing --cov-fail-under=95 test_homework2.py new_test.py -v
     
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4  # Обновлено до v4
       with:
         file: ./hw2/hw/coverage.xml
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}  # Добавлен токен
     
     - name: Upload coverage reports to GitHub
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # ← Исправлено: v3 → v4
       with:
         name: coverage-report-${{ matrix.python-version }}
         path: hw2/hw/coverage.xml
@@ -88,7 +89,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5  # Обновлено до v5
       with:
         python-version: '3.12'
     
