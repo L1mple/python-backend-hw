@@ -19,9 +19,10 @@ class ItemOut(BaseModel):
     name: str
     price: float
     deleted: bool
+    model_config = ConfigDict(extra="forbid")
 
-    class Config:
-        orm_mode = True
+    # class Config:
+    #     orm_mode = True
 
 
 class CartItemOut(BaseModel):
@@ -35,6 +36,7 @@ class CartOut(BaseModel):
     id: int
     items: List[CartItemOut]
     price: float
+    model_config = ConfigDict(extra="forbid")
 
-    class Config:
-        orm_mode = True
+    # class Config:
+    #     orm_mode = True
