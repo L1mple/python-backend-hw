@@ -1,16 +1,8 @@
-from sqlalchemy import Column, Integer, String, Boolean, Numeric, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Boolean, Numeric, ForeignKey
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import relationship
 
 base = declarative_base()
-
-cart_items = Table(
-    'cart_items',
-    base.metadata,
-    Column('cart_id', Integer, ForeignKey('carts.id'), primary_key=True),
-    Column('item_id', Integer, ForeignKey('items.id'), primary_key=True),
-    Column('quantity', Integer, nullable=False, default=1)
-)
 
 class Item(base):
     __tablename__ = "items"
@@ -20,8 +12,8 @@ class Item(base):
     price = Column(Numeric(10, 2), nullable=False)
     deleted = Column(Boolean, default=False)
     
-    items = relationship("Item", secondary=cart_items, back_populates="carts")
-    carts = relationship("Cart", secondary=cart_items, back_populates="items")
+    items = relationship("Item", back_populates="carts")
+    carts = relationship("Cart", back_populates="items")
 
 class Cart(base):
     __tablename__ = "carts"
