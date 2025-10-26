@@ -1,0 +1,32 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: shop-db-test
+    environment:
+      POSTGRES_DB: shop_db_test
+      POSTGRES_USER: shop_user
+      POSTGRES_PASSWORD: shop_password
+    ports:
+      - "5433:5432"  # Используем другой порт, чтобы не конфликтовать с локальной БД
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_db_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    tmpfs:
+      - /var/lib/postgresql/data  
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: shop-test-runner
+    environment:
+      DATABASE_URL: postgresql+asyncpg://shop_user:shop_password@postgres-test:5432/shop_db_test
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/.pytest_cache  
+    command: pytest test_homework2_all.py -v --cov=shop_api --cov-report=term-missing

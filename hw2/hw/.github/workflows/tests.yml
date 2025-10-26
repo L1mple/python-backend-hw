@@ -1,0 +1,123 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: shop_db_test
+          POSTGRES_USER: shop_user
+          POSTGRES_PASSWORD: shop_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      working-directory: ./hw2/hw
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -e .
+    
+    - name: Wait for PostgreSQL
+      run: |
+        until pg_isready -h localhost -p 5432 -U shop_user; do
+          echo "Waiting for postgres..."
+          sleep 2
+        done
+    
+    - name: Run tests with coverage
+      working-directory: ./hw2/hw
+      env:
+        DATABASE_URL: postgresql+asyncpg://shop_user:shop_password@localhost:5432/shop_db_test
+      run: |
+        pytest test_homework2_all.py -v --cov=shop_api --cov-report=xml --cov-report=term
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./hw2/hw/coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+    
+    - name: Check coverage threshold
+      working-directory: ./hw2/hw
+      run: |
+        coverage report --fail-under=95
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
+    
+    - name: Install linting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort
+    
+    - name: Run flake8
+      working-directory: ./hw2/hw
+      run: |
+        flake8 shop_api --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 shop_api --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Check formatting with black
+      working-directory: ./hw2/hw
+      run: |
+        black --check shop_api || true
+    
+    - name: Check imports with isort
+      working-directory: ./hw2/hw
+      run: |
+        isort --check-only shop_api || true
+
+  docker-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image
+      working-directory: ./hw2/hw
+      run: |
+        docker build -t shop-api:test .
+    
+    - name: Test Docker Compose
+      working-directory: ./hw2/hw
+      run: |
+        docker-compose config

@@ -1,16 +1,39 @@
-version: '3.8'
-
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shop-db
+    environment:
+      POSTGRES_DB: shop_db
+      POSTGRES_USER: shop_user
+      POSTGRES_PASSWORD: shop_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   shop-api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: shop-api
+    environment:
+      DATABASE_URL: postgresql+asyncpg://shop_user:shop_password@postgres:5432/shop_db
     ports:
       - "8000:8000"
     networks:
       - monitoring
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -63,3 +86,4 @@ networks:
 volumes:
   prometheus-data:
   grafana-data:
+  postgres-data:
