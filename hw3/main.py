@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, Response
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field, ConfigDict
 from http import HTTPStatus
 from sqlalchemy.orm import Session
@@ -6,7 +7,7 @@ from sqlalchemy import func
 from typing import List, Optional
 import json
 
-from . import db
+import db
 
 # Создаем менеджер БД
 db_manager = db.DatabaseManager()
@@ -19,6 +20,7 @@ def get_db() -> Session:
         db.close()  # Закрываем после использования
 
 app = FastAPI(title="Shop API")
+Instrumentator().instrument(app).expose(app)
 
 class OptionalBaseItem(BaseModel):
     model_config = ConfigDict(extra='forbid') # ЗАПРЕТИТ СУЩЕСТВОВАНИЕ ДРУГИХ АТРИБУТОВ В JSON

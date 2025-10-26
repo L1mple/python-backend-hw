@@ -13,6 +13,13 @@ db_manager = db.DatabaseManager()
 
 def get_db() -> Session:
     db = db_manager.get_session()
+
+    try:
+        isolation_level = db.connection().get_isolation_level()
+        print(f"Isolation level: {isolation_level}")
+    finally:
+        pass
+
     try:
         yield db  # Возвращаем сессию
     finally:
