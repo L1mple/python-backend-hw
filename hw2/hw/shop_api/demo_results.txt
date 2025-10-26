@@ -1,0 +1,33 @@
+[1] Dirty read attempt with READ UNCOMMITTED (items table)
+  Reader saw price: 100.0
+  Price after rollback: 100.0
+  -> PostgreSQL upgrades READ UNCOMMITTED to READ COMMITTED, so dirty reads do not occur even if requested.
+
+[2] Dirty read prevention with READ COMMITTED
+  Reader saw price: 100.0 (should still be 100.0)
+  -> No dirty read under READ COMMITTED.
+
+[3] Non-repeatable read in READ COMMITTED
+  First read: 100.0
+  Second read: 200.0
+  -> Non-repeatable read reproduced.
+
+[4] Repeatable read snapshot remains stable
+  First read: 100.0
+  Second read: 100.0
+  -> Snapshot stayed consistent under REPEATABLE READ.
+
+[5] Phantom read attempt under REPEATABLE READ
+  First count: 3
+  Second count: 3
+  -> No phantom visible. PostgreSQL's REPEATABLE READ is snapshot-based, so inserts committed after the snapshot remain hidden.
+
+[6] Phantom protection with SERIALIZABLE
+  First count: 3
+  Second count: 3
+  -> Snapshot stayed stable; no phantoms under SERIALIZABLE.
+
+[7] Phantom read under READ COMMITTED
+  First count: 3
+  Second count: 4
+  -> Phantom read reproduced under READ COMMITTED.

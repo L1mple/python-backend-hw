@@ -1,0 +1,42 @@
+services:
+  shop_api:
+    build:
+      context: shop_api
+      dockerfile: Dockerfile
+    ports: ["8000:8000"]
+    environment:
+      - SHOP_DATABASE_URL=postgresql+psycopg://shop:shop@postgres:5432/shop
+      - SHOP_DB_ISOLATION_LEVEL=READ COMMITTED
+    depends_on:
+      - postgres
+  shop_client:
+    build:
+      context: shop_client
+      dockerfile: Dockerfile
+    ports: ["8001:8001"]
+    depends_on: [shop_api]
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on: [shop_api]
+  grafana:
+    image: grafana/grafana:latest
+    ports: ["3000:3000"]
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on: [prometheus]
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+    ports: ["5432:5432"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
