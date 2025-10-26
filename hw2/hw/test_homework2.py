@@ -5,7 +5,6 @@ from uuid import uuid4
 import pytest
 from faker import Faker
 from fastapi.testclient import TestClient
-
 from shop_api.main import app
 
 client = TestClient(app)
@@ -282,3 +281,110 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+
+# ДОПОЛНИТЕЛЬНЫЕ ТЕСТЫ ДЛЯ ПОКРЫТИЯ
+
+def test_get_nonexistent_cart():
+    """Тест для получения несуществующей корзины"""
+    response = client.get("/cart/99999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_nonexistent_item():
+    """Тест для получения несуществующего товара"""
+    response = client.get("/item/99999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_item_to_nonexistent_cart():
+    """Тест добавления товара в несуществующую корзину"""
+    response = client.post("/cart/99999/add/1")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_nonexistent_item_to_cart(existing_empty_cart_id):
+    """Тест добавления несуществующего товара в корзину"""
+    response = client.post(f"/cart/{existing_empty_cart_id}/add/99999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_put_nonexistent_item():
+    """Тест обновления несуществующего товара"""
+    response = client.put("/item/99999", json={"name": "test", "price": 10.0})
+    assert response.status_code == HTTPStatus.NOT_MODIFIED
+
+
+def test_patch_nonexistent_item():
+    """Тест частичного обновления несуществующего товара"""
+    response = client.patch("/item/99999", json={"name": "test"})
+    assert response.status_code == HTTPStatus.NOT_MODIFIED
+
+
+def test_delete_nonexistent_item():
+    """Тест удаления несуществующего товара"""
+    response = client.delete("/item/99999")
+    assert response.status_code == HTTPStatus.OK
+
+
+def test_add_item_to_cart_twice(existing_empty_cart_id, existing_item):
+    """Тест добавления товара в корзину дважды (должно увеличить quantity)"""
+    cart_id = existing_empty_cart_id
+    item_id = existing_item["id"]
+    
+    # Первое добавление
+    response1 = client.post(f"/cart/{cart_id}/add/{item_id}")
+    assert response1.status_code == HTTPStatus.OK
+    
+    # Второе добавление
+    response2 = client.post(f"/cart/{cart_id}/add/{item_id}")
+    assert response2.status_code == HTTPStatus.OK
+    
+    # Проверяем, что quantity увеличился
+    cart_response = client.get(f"/cart/{cart_id}")
+    cart_data = cart_response.json()
+    
+    item_in_cart = next((item for item in cart_data["items"] if item["id"] == item_id), None)
+    assert item_in_cart is not None
+    assert item_in_cart["quantity"] == 2
+
+
+def test_cart_with_deleted_item(existing_empty_cart_id, deleted_item):
+    """Тест корзины с удаленным товаром"""
+    cart_id = existing_empty_cart_id
+    item_id = deleted_item["id"]
+    
+    # Добавляем удаленный товар в корзину
+    response = client.post(f"/cart/{cart_id}/add/{item_id}")
+    assert response.status_code == HTTPStatus.OK
+    
+    # Получаем корзину и проверяем, что товар помечен как unavailable
+    cart_response = client.get(f"/cart/{cart_id}")
+    cart_data = cart_response.json()
+    
+    item_in_cart = next((item for item in cart_data["items"] if item["id"] == item_id), None)
+    assert item_in_cart is not None
+    assert item_in_cart["available"] == False
+
+
+def test_item_validation():
+    """Тест валидации товара"""
+    # Неверная цена
+    response = client.post("/item", json={"name": "test", "price": -10.0})
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    
+    # Отсутствует имя
+    response = client.post("/item", json={"price": 10.0})
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    
+    # Отсутствует цена
+    response = client.post("/item", json={"name": "test"})
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+def test_cart_pagination_limits():
+    """Тест пагинации списка корзин с разными лимитами"""
+    response = client.get("/cart", params={"offset": 0, "limit": 5})
+    assert response.status_code == HTTPStatus.OK
+    data = response.json()
+    assert len(data) <= 5
