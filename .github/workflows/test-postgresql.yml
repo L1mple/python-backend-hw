@@ -42,9 +42,7 @@ jobs:
           cd hw2/hw
           uv sync
 
-      - name: Run all tests with PostgreSQL
-        env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/shop_test
+      - name: Run all tests with SQLite
         run: |
           cd hw2/hw
           uv run -m pytest -v
