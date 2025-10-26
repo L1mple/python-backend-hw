@@ -1,0 +1,8 @@
+[run]
+source = shop_api
+omit =
+    */__main__.py
+    */scripts/*
+[report]
+fail_under = 95
+show_missing = True
