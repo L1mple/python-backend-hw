@@ -1,3 +1,5 @@
+from http import HTTPStatus
+import os
 from fastapi import FastAPI, Response, Query, HTTPException, Depends, status
 from typing import List, Optional
 from contextlib import asynccontextmanager
@@ -10,11 +12,11 @@ from psycopg2.extras import RealDictCursor
 # Функция для получения подключения и курсора
 def get_db():
     conn = psycopg2.connect(
-        dbname="shop_db",
-        user="user",
-        password="qwerty",
-        host="localhost",
-        port=5430
+        dbname=os.getenv("POSTGRES_DB", "shop_db"),
+        user=os.getenv("POSTGRES_USER", "user"),
+        password=os.getenv("POSTGRES_PASSWORD", "qwerty"),
+        host=os.getenv("POSTGRES_HOST", "localhost"),
+        port=int(os.getenv("POSTGRES_PORT", 5430))
     )
     try:
         yield conn
@@ -173,10 +175,16 @@ def get_item_id(id: int, cur=Depends(get_cursor)):
 # Логическое удаление товара
 @app.delete("/item/{id}", response_model=Item)
 def delete_item(id: int, cur=Depends(get_cursor)):
-    cur.execute("SELECT id FROM items WHERE id = %s AND deleted = FALSE;", (id,))
-    if cur.fetchone() is None:
+    cur.execute("SELECT id, deleted FROM items WHERE id = %s;", (id,))
+    row = cur.fetchone()
+    if row is None:
         raise HTTPException(status_code=404, detail="Item not found")
-
+    if row["deleted"]:  # уже удалён
+        # Вернуть текущий статус товара
+        cur.execute("SELECT id, name, price, deleted FROM items WHERE id = %s;", (id,))
+        deleted_item = cur.fetchone()
+        return Item(**deleted_item)
+    # Пометить как удалён
     cur.execute(
         "UPDATE items SET deleted = TRUE WHERE id = %s RETURNING id, name, price, deleted;",
         (id,)
@@ -187,13 +195,18 @@ def delete_item(id: int, cur=Depends(get_cursor)):
 # Частичное обновление товара (PATCH)
 @app.patch("/item/{id}", response_model=Item)
 def patch_item(id: int, item: ItemForPatch, cur=Depends(get_cursor)):
-    cur.execute("SELECT id, name, price, deleted FROM items WHERE id = %s AND deleted = FALSE;", (id,))
+    # Получаем товар без фильтра deleted, чтобы проверить состояние
+    cur.execute("SELECT id, name, price, deleted FROM items WHERE id = %s;", (id,))
     stored_item = cur.fetchone()
     if stored_item is None:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    new_name = item.name if item.name is not None else stored_item['name']
-    new_price = item.price if item.price is not None else stored_item['price']
+    if stored_item["deleted"]:
+        # Для удалённого товара возвращаем 304 Not Modified
+        return Response(status_code=HTTPStatus.NOT_MODIFIED)
+
+    new_name = item.name if item.name is not None else stored_item["name"]
+    new_price = item.price if item.price is not None else stored_item["price"]
 
     cur.execute(
         "UPDATE items SET name = %s, price = %s WHERE id = %s RETURNING id, name, price, deleted;",
@@ -348,12 +361,13 @@ def add_item_to_cart(cart_id: int, item_id: int, cur=Depends(get_cursor)):
 
     # Обновляем общую цену корзины
     cur.execute("""
-        SELECT SUM(i.price * ci.quantity)
+        SELECT SUM(i.price * ci.quantity) AS sum_price
         FROM cart_items ci
         JOIN items i ON ci.item_id = i.id
         WHERE ci.cart_id = %s AND i.deleted = FALSE;
     """, (cart_id,))
-    total_price = cur.fetchone()[0] or 0
+    row = cur.fetchone()
+    total_price = row['sum_price'] or 0
 
     cur.execute("UPDATE carts SET price = %s WHERE id = %s;", (total_price, cart_id))
     # Возвращаем обновленную корзину через get_cart_id
