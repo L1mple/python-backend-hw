@@ -116,7 +116,7 @@ def create_item(item: ItemForCreateUpd, cur=Depends(get_cursor)):
         (item.name, item.price)
     )
     new_item = cur.fetchone()
-    return new_item
+    return Item(**new_item)
 
 # Полное обновление товара (PUT)
 @app.put("/item/{id}", response_model=Item)
@@ -130,7 +130,7 @@ def put_item(id: int, item: ItemForCreateUpd, cur=Depends(get_cursor)):
         (item.name, item.price, id)
     )
     updated_item = cur.fetchone()
-    return updated_item
+    return Item(**updated_item)
 
 # Получение списка товаров с фильтрами и пагинацией
 @app.get("/item", response_model=List[Item])
@@ -159,7 +159,7 @@ def get_items(
 
     cur.execute(query, tuple(params))
     items = cur.fetchall()
-    return items
+    return [Item(**item) for item in items]
 
 # Получение товара по id
 @app.get("/item/{id}", response_model=Item)
@@ -168,7 +168,7 @@ def get_item_id(id: int, cur=Depends(get_cursor)):
     item = cur.fetchone()
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    return item
+    return Item(**item)
 
 # Логическое удаление товара
 @app.delete("/item/{id}", response_model=Item)
@@ -182,7 +182,7 @@ def delete_item(id: int, cur=Depends(get_cursor)):
         (id,)
     )
     deleted_item = cur.fetchone()
-    return deleted_item
+    return Item(**deleted_item)
 
 # Частичное обновление товара (PATCH)
 @app.patch("/item/{id}", response_model=Item)
@@ -200,8 +200,7 @@ def patch_item(id: int, item: ItemForPatch, cur=Depends(get_cursor)):
         (new_name, new_price, id)
     )
     updated_item = cur.fetchone()
-    return updated_item
-
+    return Item(**updated_item)
 
 #Работа с корзиной
 #----------------------------------
@@ -209,7 +208,6 @@ def patch_item(id: int, item: ItemForPatch, cur=Depends(get_cursor)):
 # Создание новой корзины
 @app.post("/cart", status_code=status.HTTP_201_CREATED)
 def post_cart(response: Response, cur=Depends(get_cursor)):
-    # Создаем пустую корзину с ценой 0
     cur.execute("INSERT INTO carts (price) VALUES (0) RETURNING id;")
     cart_id = cur.fetchone()['id']
     response.headers["location"] = f"/cart/{cart_id}"
@@ -226,7 +224,6 @@ def get_carts(
     max_quantity: Optional[int] = Query(None, ge=0),
     cur=Depends(get_cursor)
 ):
-    # Получаем корзины с пагинацией
     cur.execute("""
         SELECT id, price FROM carts
         ORDER BY id
@@ -239,7 +236,6 @@ def get_carts(
     for cart in carts:
         cart_id = cart['id']
 
-        # Получаем элементы корзины с данными о товарах
         cur.execute("""
             SELECT ci.item_id, ci.quantity, i.name, i.deleted, i.price
             FROM cart_items ci
@@ -264,7 +260,6 @@ def get_carts(
                 total_price += item['price'] * item['quantity']
             total_quantity += item['quantity']
 
-        # Фильтрация по количеству и цене
         if min_quantity is not None and total_quantity < min_quantity:
             continue
         if max_quantity is not None and total_quantity > max_quantity:
@@ -285,12 +280,10 @@ def get_carts(
 # Получение корзины по id
 @app.get("/cart/{id}", response_model=Cart)
 def get_cart_id(id: int, cur=Depends(get_cursor)):
-    # Проверяем, что корзина существует
     cur.execute("SELECT id FROM carts WHERE id = %s;", (id,))
     if cur.fetchone() is None:
         raise HTTPException(status_code=404, detail="Cart not found")
 
-    # Получаем элементы корзины
     cur.execute("""
         SELECT ci.item_id, ci.quantity, i.name, i.deleted, i.price
         FROM cart_items ci
@@ -363,6 +356,5 @@ def add_item_to_cart(cart_id: int, item_id: int, cur=Depends(get_cursor)):
     total_price = cur.fetchone()[0] or 0
 
     cur.execute("UPDATE carts SET price = %s WHERE id = %s;", (total_price, cart_id))
-
-    # Возвращаем обновленную корзину (используем уже готовый эндпоинт)
+    # Возвращаем обновленную корзину через get_cart_id
     return get_cart_id(cart_id, cur)
