@@ -18,6 +18,7 @@ class Cart(Base):
     id = Column(Integer, primary_key=True, index=True)
 
 
+
 class CartItem(Base):
     __tablename__ = "cart_items"
     

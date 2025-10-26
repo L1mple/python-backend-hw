@@ -1,5 +1,5 @@
 from typing import List, Optional
-from sqlalchemy import create_engine, select, delete
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
 
