@@ -1,0 +1,7 @@
+pytest-cov
+pytest-mock
+pytest
+pytest-asyncio
+responses
+faker
+httpx
