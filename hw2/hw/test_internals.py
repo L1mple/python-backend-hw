@@ -4,7 +4,8 @@ import os
 import pytest
 
 from shop_api import db as db_mod
-from shop_api.main import app, chat_manager, on_startup
+from shop_api.main import app
+from shop_api.chat import chat_manager, handle_chat
 
 
 def test_on_startup_creates_schema() -> None:
@@ -72,5 +73,19 @@ async def test_broadcast_handles_exception_and_cleans_room() -> None:
     chat_manager.rooms[room] = {ws}
     await chat_manager.broadcast(room, "msg")
     assert room not in chat_manager.rooms or ws not in chat_manager.rooms.get(room, set())
+@pytest.mark.asyncio
+async def test_handle_chat_disconnect() -> None:
+    class LoopWS:
+        def __init__(self) -> None:
+            self.accepted = False
 
+        async def accept(self):
+            self.accepted = True
+            return None
+
+        async def receive_text(self) -> str:
+            raise WebSocketDisconnect()
+
+    ws = LoopWS()
+    await handle_chat(ws, "r2")
 

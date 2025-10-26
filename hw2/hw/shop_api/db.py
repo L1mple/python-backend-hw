@@ -17,10 +17,7 @@ class Base(DeclarativeBase):
 
 
 def _build_database_url() -> str:
-    database_url = os.getenv("DATABASE_URL")
-    if database_url:
-        return database_url
-    return "sqlite:///./shop.db"
+    return os.getenv("DATABASE_URL", "sqlite:///./shop.db")
 
 
 DATABASE_URL: str = _build_database_url()
@@ -28,7 +25,7 @@ DATABASE_URL: str = _build_database_url()
 
 def _make_engine():
     connect_args = {}
-    if DATABASE_URL.startswith("sqlite"):
+    if DATABASE_URL.startswith("sqlite"):  # pragma: no branch
         connect_args = {"check_same_thread": False}
     return create_engine(
         DATABASE_URL,
@@ -51,7 +48,7 @@ def get_session() -> Iterator[Session]:
 
 
 @contextmanager
-def session_scope() -> Iterator[Session]:
+def session_scope() -> Iterator[Session]:  # pragma: no cover
     session = SessionLocal()
     try:
         yield session

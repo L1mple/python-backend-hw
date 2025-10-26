@@ -1,3 +1,4 @@
+import os
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, Depends
@@ -13,7 +14,6 @@ from .models import Item as ItemModel, Cart as CartModel, CartItem as CartItemMo
 
 app = FastAPI(title="Shop API")
 
-# Expose Prometheus metrics at /metrics
 Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 
@@ -44,7 +44,6 @@ class ItemPatch(BaseModel):
 def compute_cart_price(db: Session, cart: CartModel) -> float:
     total: float = 0.0
     for ci in cart.items:
-        # item might have been deleted; still counted in price with current item price
         if ci.item is None:
             continue
         total += (ci.item.price or 0.0) * ci.quantity
@@ -75,9 +74,16 @@ def cart_to_response(db: Session, cart: CartModel) -> dict:
     }
 
 
+def init_schema() -> None:
+    ORMBase.metadata.create_all(bind=engine)
+
+
+init_schema()
+
+
 @app.on_event("startup")
 def on_startup() -> None:
-    ORMBase.metadata.create_all(bind=engine)
+    init_schema()
 
 
 # Item endpoints
@@ -225,7 +231,6 @@ def add_item_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_sessi
     if item is None:
         raise HTTPException(status_code=404)
 
-    # Find existing cart item
     existing = None
     for ci in cart.items:
         if ci.item_id == item_id:
@@ -244,52 +249,9 @@ def add_item_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_sessi
     return cart_to_response(db, cart)
 
 
-# WebSocket chat (extra task)
-class ChatRoomManager:
-    def __init__(self) -> None:
-        self.rooms: Dict[str, set[WebSocket]] = {}
-        self.usernames: Dict[WebSocket, str] = {}
+ENABLE_CHAT = os.getenv("ENABLE_CHAT") == "1"
 
-    async def connect(self, room: str, websocket: WebSocket) -> str:
-        await websocket.accept()
-        username = f"user-{uuid4().hex[:8]}"
-        self.rooms.setdefault(room, set()).add(websocket)
-        self.usernames[websocket] = username
-        return username
+if ENABLE_CHAT:
+    from . import chat as chat_module
 
-    def disconnect(self, room: str, websocket: WebSocket) -> None:
-        connections = self.rooms.get(room)
-        if connections is not None and websocket in connections:
-            connections.remove(websocket)
-            if not connections:
-                # remove empty room
-                self.rooms.pop(room, None)
-        self.usernames.pop(websocket, None)
-
-    async def broadcast(self, room: str, message: str, sender: Optional[WebSocket] = None) -> None:
-        for ws in list(self.rooms.get(room, set())):
-            if sender is not None and ws is sender:
-                continue
-            try:
-                await ws.send_text(message)
-            except Exception:
-                # Best-effort sending; drop failed connections
-                self.disconnect(room, ws)
-
-    def username_for(self, websocket: WebSocket) -> str:
-        return self.usernames.get(websocket, "unknown")
-
-
-chat_manager = ChatRoomManager()
-
-
-@app.websocket("/chat/{chat_name}")
-async def chat_websocket(websocket: WebSocket, chat_name: str):
-    username = await chat_manager.connect(chat_name, websocket)
-    try:
-        while True:
-            message = await websocket.receive_text()
-            formatted = f"{username} :: {message}"
-            await chat_manager.broadcast(chat_name, formatted, sender=websocket)
-    except WebSocketDisconnect:
-        chat_manager.disconnect(chat_name, websocket)
+    chat_module.register_chat_routes(app)
