@@ -1,4 +1,4 @@
-name: "HW2 Tests"
+name: "HW5 Tests"
 
 # Запускаем тесты при изменении файлов в hw2/hw/
 on:
