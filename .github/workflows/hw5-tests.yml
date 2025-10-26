@@ -2,10 +2,10 @@ name: "HW5 Tests"
 
 on:
   pull_request:
-    branches: [ main, hw5 ]
+    branches: [ main ]
     paths: [ 'hw5/**' ]
   push:
-    branches: [ main, hw5 ]
+    branches: [ main ]
     paths: [ 'hw5/**' ]
 
 jobs:

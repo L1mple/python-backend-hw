@@ -3,9 +3,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from hw5.shop_api.main import app, Base, get_db
+from hw5.shop_api.main import app, Base
 
-DATABASE_URL = "postgresql://postgres:password@postgres:5432/hw5_db"
+DATABASE_URL = "postgresql://postgres:password@localhost:5432/hw5_db"
 
 engine = create_engine(DATABASE_URL)
 TestingSessionLocal = sessionmaker(bind=engine)
