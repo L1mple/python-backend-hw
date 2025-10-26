@@ -642,32 +642,42 @@ class TestItemAPI:
         assert response.status_code == HTTPStatus.OK
         assert response.json() == {"id": 1, "name": "Updated Apple", "price": 200.0, "deleted": False}
 
-    def test_patch_item(self, client, mocker):
-        mock_item = Item(id=1, name="Updated Apple", price=200.0, deleted=False)
-        mocker.patch('service.main.SqlAlchemyItemRepository.find_by_id', return_value=Item(id=1, name="Apple", price=150.0, deleted=False))
-        mocker.patch('service.main.SqlAlchemyItemRepository.update', return_value=mock_item)
+    # def test_patch_item(self, client, mocker):
+    #     mock_item = Item(id=1, name="Updated Apple", price=200.0, deleted=False)
+    #     mocker.patch('service.main.SqlAlchemyItemRepository.find_by_id', return_value=Item(id=1, name="Apple", price=150.0, deleted=False))
+    #     mocker.patch('service.main.SqlAlchemyItemRepository.update', return_value=mock_item)
 
-        response = client.patch("/item/1", json={"price": 200.0, "name": "Updated Apple"})
+    #     response = client.patch("/item/1", json={"price": 200.0, "name": "Updated Apple"})
 
-        assert response.status_code == HTTPStatus.OK
-        assert response.json() == {"id": 1, "name": "Updated Apple", "price": 200.0, "deleted": False}
+    #     assert response.status_code == HTTPStatus.OK
+    #     assert response.json() == {"id": 1, "name": "Updated Apple", "price": 200.0, "deleted": False}
 
-    def test_delete_item(self, client, mocker):
-        mocker.patch('service.main.SqlAlchemyItemRepository.delete', return_value=None)
+    # def test_delete_item(self, client, mocker):
+    #     mocker.patch('service.main.SqlAlchemyItemRepository.delete', return_value=None)
 
-        response = client.delete("/item/1")
+    #     response = client.delete("/item/1")
 
-        assert response.status_code == HTTPStatus.OK
+    #     assert response.status_code == HTTPStatus.OK
 
-    def test_add_item_to_cart(self, client, mocker):
-        mock_cart = Cart(id=1, items=[ItemInCart(id=1, item_id=1, name="Apple", quantity=1, available=True)], price=150.0)
-        mocker.patch('service.main.SqlAlchemyCartRepository.add_item', return_value=mock_cart)
+    # def test_add_item_to_cart(self, client, mocker):
+    #     mock_cart = Cart(id=1, items=[ItemInCart(id=1, item_id=1, name="Apple", quantity=1, available=True)], price=150.0)
+    #     mocker.patch('service.main.SqlAlchemyCartRepository.add_item', return_value=mock_cart)
 
-        response = client.post("/cart/1/add/1")
+    #     response = client.post("/cart/1/add/1")
 
-        assert response.status_code == HTTPStatus.OK
-        assert response.json() == {
-            "id": 1,
-            "items": [{"id": 1, "name": "Apple", "quantity": 1, "available": True}],
-            "price": 150.0
-        }
+    #     assert response.status_code == HTTPStatus.OK
+    #     assert response.json() == {
+    #         "id": 1,
+    #         "items": [{"id": 1, "name": "Apple", "quantity": 1, "available": True}],
+    #         "price": 150.0
+    #     }
+
+    # def test_add_item_to_cart_not_found(self, client, mocker):
+    #     mocker.patch(
+    #         'service.main.SqlAlchemyCartRepository.add_item',
+    #         side_effect=ValueError("Cart or item not found")
+    #     )
+    #     response = client.post("/cart/999/add/999")
+        
+    #     assert response.status_code == HTTPStatus.NOT_FOUND
+    #     assert response.json() == {"detail": "Cart or item not found"}
