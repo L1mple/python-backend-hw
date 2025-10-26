@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
-# Use PostgreSQL if DATABASE_URL is set, otherwise fallback to SQLite
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "sqlite+aiosqlite:///./test.db"
@@ -25,14 +24,12 @@ async def async_session_maker(engine: AsyncEngine):
     """Create session factory and initialize database"""
     from shop_api.core.models import Base
 
-    # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     yield async_session
     
-    # Drop tables after tests
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
@@ -40,7 +37,6 @@ async def async_session_maker(engine: AsyncEngine):
 async def clean_db(async_session_maker):
     """Clean database before each test"""
     async with async_session_maker() as session:
-        # Use proper table names from models
         await session.execute(text("DELETE FROM cart_items"))
         await session.execute(text("DELETE FROM carts"))
         await session.execute(text("DELETE FROM items"))
@@ -49,13 +45,11 @@ async def clean_db(async_session_maker):
 async def set_isolation_level(session: AsyncSession, level: str):
     """Set isolation level for current transaction"""
     if 'sqlite' in str(session.bind.url):
-        # SQLite only supports SERIALIZABLE and READ UNCOMMITTED
         if level in ('SERIALIZABLE', 'REPEATABLE READ', 'READ COMMITTED'):
             await session.execute(text("PRAGMA read_uncommitted = 0"))
         elif level == 'READ UNCOMMITTED':
             await session.execute(text("PRAGMA read_uncommitted = 1"))
     else:
-        # PostgreSQL supports all isolation levels
         await session.execute(text(f"SET TRANSACTION ISOLATION LEVEL {level}"))
 
 @pytest.mark.asyncio
@@ -66,35 +60,29 @@ async def test_dirty_read(async_session_maker):
     2. Session 2 tries to read the same data
     3. Should NOT see uncommitted changes in READ COMMITTED (default)
     """
-    # Create test item
     async with async_session_maker() as session:
         await session.execute(
             text("INSERT INTO items (name, price, deleted) VALUES ('test_item', 100, false)")
         )
         await session.commit()
 
-    # Start two concurrent sessions
     async with async_session_maker() as session1, async_session_maker() as session2:
         await session1.begin()
         # Set isolation level for session1 if using PostgreSQL
         if 'postgresql' in str(session1.bind.url):
             await set_isolation_level(session1, "READ UNCOMMITTED")
 
-        # Update price in session1 (uncommitted)
         await session1.execute(
             text("UPDATE items SET price = 200 WHERE name = 'test_item'")
         )
 
-        # Try to read in session2
         result = await session2.execute(
             text("SELECT price FROM items WHERE name = 'test_item'")
         )
         price = result.scalar()
 
-        # In READ COMMITTED (default), should still see old price
         assert price == 100, "Should not see uncommitted changes (dirty read)"
 
-        # Rollback session1 changes
         await session1.rollback()
 
 @pytest.mark.asyncio
@@ -105,39 +93,33 @@ async def test_non_repeatable_read(async_session_maker):
     2. Session 2 modifies and commits the same data
     3. Session 1 reads again and sees different results in READ COMMITTED
     """
-    # Create test item
     async with async_session_maker() as session:
         await session.execute(
             text("INSERT INTO items (name, price, deleted) VALUES ('test_item', 100, false)")
         )
         await session.commit()
 
-    # Start two concurrent sessions
     async with async_session_maker() as session1, async_session_maker() as session2:
         await session1.begin()
         if 'postgresql' in str(session1.bind.url):
             await set_isolation_level(session1, "READ COMMITTED")
 
-        # First read in session1
         result = await session1.execute(
             text("SELECT price FROM items WHERE name = 'test_item'")
         )
         price1 = result.scalar()
         assert price1 == 100
 
-        # Session 2 updates and commits
         await session2.execute(
             text("UPDATE items SET price = 200 WHERE name = 'test_item'")
         )
         await session2.commit()
 
-        # Second read in session1
         result = await session1.execute(
             text("SELECT price FROM items WHERE name = 'test_item'")
         )
         price2 = result.scalar()
 
-        # In READ COMMITTED, should see the new value
         assert price2 == 200, "Should see committed changes (non-repeatable read)"
         await session1.commit()
 
@@ -152,38 +134,32 @@ async def test_repeatable_read(async_session_maker):
     if 'sqlite' in str(async_session_maker.kw['bind'].url):
         pytest.skip("SQLite doesn't support REPEATABLE READ")
 
-    # Create test item
     async with async_session_maker() as session:
         await session.execute(
             text("INSERT INTO items (name, price, deleted) VALUES ('test_item', 100, false)")
         )
         await session.commit()
 
-    # Start two concurrent sessions
     async with async_session_maker() as session1, async_session_maker() as session2:
         await session1.begin()
         await set_isolation_level(session1, "REPEATABLE READ")
 
-        # First read in session1
         result = await session1.execute(
             text("SELECT price FROM items WHERE name = 'test_item'")
         )
         price1 = result.scalar()
         assert price1 == 100
 
-        # Session 2 updates and commits
         await session2.execute(
             text("UPDATE items SET price = 200 WHERE name = 'test_item'")
         )
         await session2.commit()
 
-        # Second read in session1
         result = await session1.execute(
             text("SELECT price FROM items WHERE name = 'test_item'")
         )
         price2 = result.scalar()
 
-        # In REPEATABLE READ, should still see the old value
         assert price2 == 100, "Should not see changes in REPEATABLE READ"
         await session1.commit()
 
@@ -195,31 +171,26 @@ async def test_phantom_read(async_session_maker):
     2. Session 2 inserts a new record in that range
     3. Session 1 queries again and sees the new record in READ COMMITTED
     """
-    # Start two concurrent sessions
     async with async_session_maker() as session1, async_session_maker() as session2:
         await session1.begin()
         if 'postgresql' in str(session1.bind.url):
             await set_isolation_level(session1, "READ COMMITTED")
 
-        # First count in session1
         result = await session1.execute(
             text("SELECT COUNT(*) FROM items WHERE price BETWEEN 50 AND 150")
         )
         count1 = result.scalar()
 
-        # Session 2 inserts new record
         await session2.execute(
             text("INSERT INTO items (name, price, deleted) VALUES ('phantom', 100, false)")
         )
         await session2.commit()
 
-        # Second count in session1
         result = await session1.execute(
             text("SELECT COUNT(*) FROM items WHERE price BETWEEN 50 AND 150")
         )
         count2 = result.scalar()
 
-        # In READ COMMITTED, should see the new record
         assert count2 == count1 + 1, "Should see phantom record in READ COMMITTED"
         await session1.commit()
 
@@ -234,29 +205,24 @@ async def test_serializable(async_session_maker):
     if 'sqlite' in str(async_session_maker.kw['bind'].url):
         pytest.skip("SQLite SERIALIZABLE behavior differs from PostgreSQL")
 
-    # Start two concurrent sessions
     async with async_session_maker() as session1, async_session_maker() as session2:
         await session1.begin()
         await set_isolation_level(session1, "SERIALIZABLE")
 
-        # First count in session1
         result = await session1.execute(
             text("SELECT COUNT(*) FROM items WHERE price BETWEEN 50 AND 150")
         )
         count1 = result.scalar()
 
-        # Session 2 tries to insert new record
         await session2.execute(
             text("INSERT INTO items (name, price, deleted) VALUES ('phantom', 100, false)")
         )
         await session2.commit()
 
-        # Second count in session1
         result = await session1.execute(
             text("SELECT COUNT(*) FROM items WHERE price BETWEEN 50 AND 150")
         )
         count2 = result.scalar()
 
-        # In SERIALIZABLE, should not see the new record
         assert count2 == count1, "Should not see phantom record in SERIALIZABLE"
         await session1.commit()
