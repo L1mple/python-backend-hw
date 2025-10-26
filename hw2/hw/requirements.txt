@@ -9,3 +9,6 @@ httpx>=0.27.2
 Faker>=37.8.0
 
 prometheus-fastapi-instrumentator
+sqlalchemy
+psycopg2
+
