@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:latest
+    container_name: shop-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: shop_user
+      POSTGRES_PASSWORD: shop_password
+      POSTGRES_DB: shop_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   shop-api:
     build:
       context: .
@@ -7,6 +25,11 @@ services:
     restart: always
     ports:
       - 8000:8000
+    environment:
+      DATABASE_URL: postgresql://shop_user:shop_password@postgres:5432/shop_db
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   grafana:
     image: grafana/grafana:latest
@@ -52,3 +75,4 @@ services:
 volumes:
     prometheus_data: {}
     grafana_data: {}
+    postgres_data: {}

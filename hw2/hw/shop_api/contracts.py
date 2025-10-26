@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List
-from store.storage import CartData, ItemnInCartData, ItemData, ItemsData
+from shop_api.store.storage import CartData, ItemnInCartData, ItemData, ItemsData
 
 class IdModel(BaseModel):
     """
