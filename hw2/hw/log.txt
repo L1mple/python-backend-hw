@@ -1,0 +1,66 @@
+transaction-demo-1  | ==================================================
+transaction-demo-1  | ========= ЗАПУСК ТЕСТОВ УРОВНЕЙ ИЗОЛЯЦИИ =========
+transaction-demo-1  | ==================================================
+transaction-demo-1  |
+transaction-demo-1  | [Setup] Тестовые данные инициализированы
+transaction-demo-1  | [Setup] Создан продукт #1 с ценой 150.0
+transaction-demo-1  |
+transaction-demo-1  |
+transaction-demo-1  | === ТЕСТ: ЧТЕНИЕ НЕЗАВЕРШЕННЫХ ДАННЫХ ===
+transaction-demo-1  |
+transaction-demo-1  | PostgreSQL не поддерживает READ UNCOMMITTED, используем READ COMMITTED
+transaction-demo-1  | [Tx1] Начало транзакции
+transaction-demo-1  | [Tx1] Текущая цена: 150.00
+transaction-demo-1  | [Tx1] Цена изменена на 200 (не подтверждено)
+transaction-demo-1  | [Tx2] Чтение данных
+transaction-demo-1  | [Tx2] Полученная цена: 150.00
+transaction-demo-1  | [Tx1] Отмена изменений
+transaction-demo-1  | [Setup] Тестовые данные инициализированы
+transaction-demo-1  | [Setup] Создан продукт #1 с ценой 150.0
+transaction-demo-1  |
+transaction-demo-1  |
+transaction-demo-1  | === ТЕСТ: ИЗМЕНЕНИЕ ДАННЫХ ПРИ ЧТЕНИИ ===
+transaction-demo-1  |
+transaction-demo-1  | [Reader] Начало чтения (READ COMMITTED)
+transaction-demo-1  | [Level] Текущий уровень: READ COMMITTED
+transaction-demo-1  | [Reader] Первое чтение: 150.00
+transaction-demo-1  | [Writer] Изменение данных
+transaction-demo-1  | [Writer] Изменения сохранены
+transaction-demo-1  | [Reader] Второе чтение: 250.00
+transaction-demo-1  | [Setup] Тестовые данные инициализированы
+transaction-demo-1  | [Setup] Создан продукт #1 с ценой 150.0
+transaction-demo-1  |
+transaction-demo-1  |
+transaction-demo-1  | === ТЕСТ: СОГЛАСОВАННОСТЬ ДАННЫХ ===
+transaction-demo-1  |
+transaction-demo-1  | [Reader] Начало чтения (REPEATABLE READ)
+transaction-demo-1  | [Level] Текущий уровень: REPEATABLE READ
+transaction-demo-1  | [Reader] Первое чтение: 150.00
+transaction-demo-1  | [Writer] Попытка изменения
+transaction-demo-1  | [Writer] Изменения выполнены (но не видны читателю)
+transaction-demo-1  | [Reader] Второе чтение: 150.00
+transaction-demo-1  | [Setup] Тестовые данные инициализированы
+transaction-demo-1  | [Setup] Создан продукт #1 с ценой 150.0
+transaction-demo-1  |
+transaction-demo-1  |
+transaction-demo-1  | === ТЕСТ: ФАНТОМНЫЕ ДАННЫЕ ===
+transaction-demo-1  |
+transaction-demo-1  | [Setup] Подготовлены тестовые данные X-серии
+transaction-demo-1  | [Reader] Начало чтения
+transaction-demo-1  | [Reader] Найдено записей: 1
+transaction-demo-1  | [Writer] Добавление новой записи
+transaction-demo-1  | [Writer] Новая запись добавлена
+transaction-demo-1  | [Reader] Теперь записей: 2
+transaction-demo-1  | [Setup] Тестовые данные инициализированы
+transaction-demo-1  | [Setup] Создан продукт #1 с ценой 150.0
+transaction-demo-1  |
+transaction-demo-1  |
+transaction-demo-1  | === ТЕСТ: СЕРИАЛИЗУЕМАЯ ИЗОЛЯЦИЯ ===
+transaction-demo-1  |
+transaction-demo-1  | [Setup] Подготовлены тестовые данные Y-серии
+transaction-demo-1  | [Reader] Начало (SERIALIZABLE)
+transaction-demo-1  | [Reader] Начальное количество: 1
+transaction-demo-1  | [Writer] Попытка записи
+transaction-demo-1  | [Writer] Запись успешно добавлена
+transaction-demo-1  | [Reader] Финальное количество: 1
+transaction-demo-1  | [Reader] Успешное завершение
