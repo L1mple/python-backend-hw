@@ -1,9 +1,18 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, HTTPException, status
+from fastapi import APIRouter, Depends, Query, Response, HTTPException, status
 from pydantic import NonNegativeInt, PositiveInt
 
-from store.queries import add_cart_item, create_cart_record, list_carts, list_items
+from sqlalchemy.orm import Session
+
+from store.database import get_session
+from store.queries import (
+    add_cart_item,
+    create_cart_record,
+    get_cart as get_cart_record,
+    get_item,
+    list_carts,
+)
 from store.models import Cart
 
 
@@ -11,8 +20,11 @@ router = APIRouter(prefix="/cart")
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_cart(response: Response) -> Cart:
-    cart = create_cart_record()
+async def create_cart(
+    response: Response,
+    session: Session = Depends(get_session),
+) -> Cart:
+    cart = create_cart_record(session)
     response.headers["Location"] = f"/cart/{cart.id}"
     return cart
 
@@ -25,27 +37,40 @@ async def get_carts(
     max_price: Annotated[float | None, Query(gt=0)] = None,
     min_quantity: Annotated[int | None, Query(gt=0)] = None,
     max_quantity: Annotated[int | None, Query(ge=0)] = None,
+    session: Session = Depends(get_session),
 ) -> list[Cart]:
     return list_carts(
-        offset, limit, min_price, max_price, min_quantity, max_quantity
+        session,
+        offset,
+        limit,
+        min_price,
+        max_price,
+        min_quantity,
+        max_quantity,
     )
 
 
 @router.get("/{id}")
-async def get_cart(id: int) -> Cart:
-    carts = list_carts(offset=id, limit=1)
-    if not carts:
+async def get_cart(id: int, session: Session = Depends(get_session)) -> Cart:
+    cart = get_cart_record(session, id)
+    if cart is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return carts[0]
+    return cart
 
 
 @router.post("/{cart_id}/add/{item_id}", status_code=status.HTTP_201_CREATED)
-async def add_item_to_cart(cart_id: int, item_id: int) -> Cart:
-    cart = list_carts(offset=cart_id, limit=1)
-    if not cart:
+async def add_item_to_cart(
+    cart_id: int,
+    item_id: int,
+    session: Session = Depends(get_session),
+) -> Cart:
+    cart = get_cart_record(session, cart_id)
+    if cart is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
-    item = list_items(offset=item_id, limit=1)
-    if not item:
+    item = get_item(session, item_id)
+    if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
-    add_cart_item(cart[0], item[0])
-    return cart[0]
+    updated_cart = add_cart_item(session, cart_id, item_id)
+    if updated_cart is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unable to update cart")
+    return updated_cart

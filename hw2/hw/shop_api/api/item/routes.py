@@ -1,9 +1,19 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, HTTPException, status
+from fastapi import APIRouter, Depends, Query, Response, HTTPException, status
 from pydantic import NonNegativeInt, PositiveInt
 
-from store.queries import create_item_record, list_items, patch_item_record, replace_item_record
+from sqlalchemy.orm import Session
+
+from store.database import get_session
+from store.queries import (
+    create_item_record,
+    delete_item,
+    get_item as get_item_record,
+    list_items,
+    patch_item_record,
+    replace_item_record,
+)
 from store.models import Item
 from api.item.contracts import ItemPostRequest, ItemPutRequest, ItemPatchRequest
 
@@ -12,8 +22,12 @@ router = APIRouter(prefix="/item")
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_item(request: ItemPostRequest, response: Response) -> Item:
-    item = create_item_record(request.name, request.price)
+async def create_item(
+    request: ItemPostRequest,
+    response: Response,
+    session: Session = Depends(get_session),
+) -> Item:
+    item = create_item_record(session, request.name, request.price)
     response.headers["Location"] = f"/item/{item.id}"
     return item
 
@@ -25,41 +39,53 @@ async def get_items(
     min_price: Annotated[float | None, Query(gt=0)] = None,
     max_price: Annotated[float | None, Query(gt=0)] = None,
     show_deleted: Annotated[bool, Query()] = False,
+    session: Session = Depends(get_session),
 ) -> list[Item]:
     return list_items(
-        offset, limit, min_price, max_price, show_deleted
+        session,
+        offset,
+        limit,
+        min_price,
+        max_price,
+        show_deleted,
     )
 
 
 @router.get("/{id}")
-async def get_item(id: int) -> Item:
-    items = list_items(offset=id, limit=1)
-    if not items:
+async def get_item(id: int, session: Session = Depends(get_session)) -> Item:
+    item = get_item_record(session, id)
+    if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return items[0]
+    return item
 
 
 @router.put("/{id}")
-async def put_item(id: int, request: ItemPutRequest) -> Item:
-    items = list_items(offset=id, limit=1)
-    if not items:
+async def put_item(
+    id: int,
+    request: ItemPutRequest,
+    session: Session = Depends(get_session),
+) -> Item:
+    updated = replace_item_record(session, id, request.name, request.price)
+    if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    replace_item_record(items[0].id, request.name, request.price)
-    return items[0]
+    return updated
 
 
 @router.patch("/{id}")
-async def patch_item(id: int, request: ItemPatchRequest) -> Item:
-    items = list_items(offset=id, limit=1)
-    if not items:
+async def patch_item(
+    id: int,
+    request: ItemPatchRequest,
+    session: Session = Depends(get_session),
+) -> Item:
+    patched = patch_item_record(session, id, request.name, request.price)
+    if patched is None:
         raise HTTPException(status_code=status.HTTP_304_NOT_MODIFIED)
-    patch_item_record(items[0].id, request.name, request.price)
-    return items[0]
+    return patched
 
 
 @router.delete("/{id}")
-async def delete_item(id: int) -> None:
-    items = list_items(offset=id, limit=1)
-    if not items:
-        return
-    items[0].deleted = True
+async def delete_item_route(
+    id: int,
+    session: Session = Depends(get_session),
+) -> None:
+    delete_item(session, id)

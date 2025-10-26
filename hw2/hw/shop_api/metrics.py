@@ -3,6 +3,7 @@ from __future__ import annotations
 from prometheus_client import REGISTRY
 from prometheus_client.core import GaugeMetricFamily
 
+from store.database import init_db, session_scope
 from store.queries import compute_store_statistics
 
 
@@ -10,7 +11,8 @@ class StoreMetricsCollector:
     """Exports aggregated in-memory store statistics for Prometheus."""
 
     def collect(self):  # type: ignore[override]
-        stats = compute_store_statistics()
+        with session_scope() as session:
+            stats = compute_store_statistics(session)
         yield GaugeMetricFamily(
             "Shop: Number of carts",
             "Number of carts in service",
@@ -49,6 +51,7 @@ _collector: StoreMetricsCollector | None = None
 def register_collector() -> None:
     global _collector
     if _collector is None:
+        init_db()
         _collector = StoreMetricsCollector()
         REGISTRY.register(_collector)
 

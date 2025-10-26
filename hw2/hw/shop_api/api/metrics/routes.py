@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Response
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, generate_latest
 
-# Ensure metrics are registered before serving them.
-import metrics  # noqa: F401
+import metrics
 
 router = APIRouter()
 
