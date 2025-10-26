@@ -1,0 +1,34 @@
+services:
+  app:
+    image: shop-app:latest
+    restart: always
+    depends_on:
+      - db
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+
+#  grafana:
+#    image: grafana/grafana:latest
+#    restart: always
+#    ports:
+#      - "3000:3000"
+#
+#  prometheus:
+#    image: prom/prometheus:latest
+#    restart: always
+#    volumes:
+#      - "./prometheus.yml:/etc/prometheus/prometheus.yml"
+#    ports:
+#        - "9090:9090"
