@@ -1,0 +1,11 @@
+[run]
+branch = True
+source = shop_api
+omit = 
+    shop_api/client.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == "__main__":
