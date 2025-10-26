@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Chat</title>
+</head>
+<body>
+    <h2>Chat Room: <span id="room-name"></span></h2>
+    <div id="messages" style="height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px;"></div>
+    <input type="text" id="messageInput" style="width: 300px;" placeholder="Type a message...">
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        const chatName = prompt("Enter chat room name:", "general");
+        document.getElementById('room-name').textContent = chatName;
+        
+        const ws = new WebSocket(`ws://localhost:8000/chat/${chatName}`);
+        
+        ws.onmessage = function(event) {
+            const messages = document.getElementById('messages');
+            messages.innerHTML += `<div>${event.data}</div>`;
+            messages.scrollTop = messages.scrollHeight;
+        };
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            ws.send(input.value);
+            input.value = '';
+        }
+        
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+</html>
