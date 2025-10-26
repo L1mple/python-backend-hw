@@ -64,12 +64,3 @@ def test_metrics_endpoint_available() -> None:
     assert response.status_code == HTTPStatus.OK
     assert "python_info" in response.text or "http_requests_total" in response.text
 
-
-def test_websocket_chat_broadcast_between_two_clients() -> None:
-    with client.websocket_connect("/chat/test-room") as ws1, client.websocket_connect("/chat/test-room") as ws2:
-        ws1.send_text("hello")
-        received = ws2.receive_text()
-        assert "hello" in received
-        assert "user-" in received
-
-

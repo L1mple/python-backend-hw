@@ -4,8 +4,9 @@ import os
 import pytest
 
 from shop_api import db as db_mod
-from shop_api.main import app
+from shop_api.main import app, on_startup
 from shop_api.chat import chat_manager, handle_chat
+from fastapi import WebSocketDisconnect
 
 
 def test_on_startup_creates_schema() -> None:
