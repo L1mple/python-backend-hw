@@ -105,8 +105,10 @@ def test_get_cart(request, cart: int, not_empty: bool) -> None:
         price = 0
 
         for item in response_json["items"]:
-            item_id = item["id"]
-            price += client.get(f"/item/{item_id}").json()["price"] * item["quantity"]
+            item_id = item["item_id"]
+            item_info = client.get(f"/item/{item_id}").json()
+            if 'deleted' in item_info and item_info['deleted'] == False:
+                price += item_info["price"] * item["quantity"]
 
         assert response_json["price"] == pytest.approx(price, 1e-8)
     else:
@@ -118,10 +120,10 @@ def test_get_cart(request, cart: int, not_empty: bool) -> None:
     [
         ({}, HTTPStatus.OK),
         ({"offset": 1, "limit": 2}, HTTPStatus.OK),
-        ({"min_price": 1000.0}, HTTPStatus.OK),
+        ({"min_price": 500.0}, HTTPStatus.OK),
         ({"max_price": 20.0}, HTTPStatus.OK),
-        ({"min_quantity": 1}, HTTPStatus.OK),
-        ({"max_quantity": 0}, HTTPStatus.OK),
+        ({"min_quantity": 3}, HTTPStatus.OK),
+        ({"max_quantity": 4}, HTTPStatus.OK),
         ({"offset": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
         ({"limit": 0}, HTTPStatus.UNPROCESSABLE_ENTITY),
         ({"limit": -1}, HTTPStatus.UNPROCESSABLE_ENTITY),
@@ -147,13 +149,11 @@ def test_get_cart_list(query: dict[str, Any], status_code: int):
         if "max_price" in query:
             assert all(item["price"] <= query["max_price"] for item in data)
 
-        quantity = sum(item["quantity"] for cart in data for item in cart["items"])
-
         if "min_quantity" in query:
-            assert quantity >= query["min_quantity"]
+            assert all(item["quantity"] >= query["min_quantity"] for item in data)
 
         if "max_quantity" in query:
-            assert quantity <= query["max_quantity"]
+            assert all(item["quantity"] <= query["max_quantity"] for item in data)
 
 
 def test_post_item() -> None:
@@ -277,8 +277,8 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
 
-    response = client.get(f"/item/{item_id}")
-    assert response.status_code == HTTPStatus.NOT_FOUND
+    response = client.get(f"/item/{item_id}").json()
+    assert response["deleted"] == True
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK

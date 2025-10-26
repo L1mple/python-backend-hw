@@ -10,7 +10,7 @@ class ItemOrm(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(255), nullable=False)
     price = Column(Float, nullable=False)
-    deleted = Column(Boolean, default=False)
+    deleted = Column(Boolean, default=False, nullable=False)
 
     cart_items = relationship(
         "CartItemOrm",

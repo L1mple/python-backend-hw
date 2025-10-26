@@ -7,8 +7,8 @@ def cart_aggregate(items : Iterable[CartItem]) -> Tuple[float, int]:
     quantity = 0
     price = 0
     for item in items:
-        quantity += item.quantity
         if item.available:
+            quantity += item.quantity
             price += item.quantity*item.price
     return price, quantity
 
@@ -38,6 +38,7 @@ class CartItemMapper:
     def to_domain(cart_item_orm : CartItemOrm) -> CartItem:
         return CartItem(
             id=cart_item_orm.id,
+            item_id=cart_item_orm.item.id,
             quantity=int(cart_item_orm.quantity),
             name=cart_item_orm.item.name,
             price=float(cart_item_orm.item.price),

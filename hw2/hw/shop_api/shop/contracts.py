@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from ..data.schemas import Item, PatchItem, CartItem, Cart
 
 class ItemResponse(BaseModel):
-    id : int
+    id : int | None
     name : str
     price : float
     deleted : bool
@@ -37,6 +37,7 @@ class PatchItemRequest(BaseModel):
 
 class CartItemResponse(BaseModel):
     id : int
+    item_id : int
     name : str
     price : float
     quantity : int
@@ -45,12 +46,12 @@ class CartItemResponse(BaseModel):
     @staticmethod
     def from_entity(entity : CartItem) -> CartItemResponse:
         return CartItemResponse(
-            id=entity.id, name=entity.name, price=entity.price,
+            id=entity.id, item_id=entity.item_id, name=entity.name, price=entity.price,
             quantity=entity.quantity, available=entity.available
         )
 
 class CartResponse(BaseModel):
-    id : int
+    id : int | None
     items : List[CartItemResponse]
     price : float
     quantity : int

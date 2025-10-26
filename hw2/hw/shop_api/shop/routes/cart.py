@@ -24,10 +24,10 @@ async def create_cart(repo : CartRepository = Depends(get_cart_repo)):
 async def get_carts(
     offset : Annotated[NonNegativeInt, Query()] = 0,
     limit : Annotated[PositiveInt, Query()] = 10,
-    min_price : Optional[Annotated[NonNegativeFloat, Query()]] = None,
-    max_price : Optional[Annotated[NonNegativeFloat, Query()]] = None,
-    min_quantity : Optional[Annotated[NonNegativeInt, Query()]] = None,
-    max_quantity : Optional[Annotated[PositiveInt, Query()]] = None,
+    min_price : Annotated[Optional[NonNegativeFloat], Query()] = None,
+    max_price : Annotated[Optional[NonNegativeFloat], Query()] = None,
+    min_quantity : Annotated[Optional[NonNegativeInt], Query()] = None,
+    max_quantity : Annotated[Optional[NonNegativeInt], Query()] = None,
     repo : CartRepository = Depends(get_cart_repo)
 ) -> List[CartResponse]:
     return [

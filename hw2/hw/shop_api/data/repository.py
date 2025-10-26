@@ -33,7 +33,7 @@ class ItemRepository:
     ) -> List[Item]:
         orm_items = self.session.query(ItemOrm)
         if not show_deleted:
-            orm_items = orm_items.filter_by(deleted=False)
+            orm_items = orm_items.filter(ItemOrm.deleted==False)
         if min_price is not None:
             orm_items = orm_items.filter(ItemOrm.price >= min_price)
         if max_price is not None:
@@ -44,7 +44,7 @@ class ItemRepository:
 
     def patch(self, item_id : int, patch_item : PatchItem) -> Item:
         orm_item = self.session.query(ItemOrm).filter_by(id=item_id).first()
-        if orm_item is None:
+        if orm_item is None or orm_item.deleted:
             raise ValueError(f"Item with id {item_id} not found")
         if patch_item.name is not None:
             orm_item.name = patch_item.name
@@ -55,7 +55,7 @@ class ItemRepository:
 
     def update(self, item_id : int, item : Item) -> Item:
         orm_item = self.session.query(ItemOrm).filter_by(id=item_id).first()
-        if not orm_item:
+        if orm_item is None or orm_item.deleted:
             raise ValueError(f"Item with id {item_id} not found")
         orm_item = ItemMapper.to_orm(item, orm_item)
         self.session.flush()
@@ -63,9 +63,9 @@ class ItemRepository:
 
     def delete(self, item_id : int) -> None:
         orm_item = self.session.query(ItemOrm).filter_by(id=item_id).first()
-        if orm_item:
+        if orm_item is not None:
             orm_item.deleted = True
-        self.session.flush()
+            self.session.flush()
 
 
 class CartRepository:
@@ -85,15 +85,18 @@ class CartRepository:
     def get_carts(
         self, offset : int = 0, limit : int = 10,
         min_price : Optional[float] = None, max_price : Optional[float] = None,
-        max_quantity : Optional[int] = None, min_quantity : Optional[int] = None
+        min_quantity : Optional[int] = None, max_quantity : Optional[int] = None
     ) -> List[Cart]:
         price_comp = CartItemOrm.quantity * ItemOrm.price
-        price_comp = case((ItemOrm.deleted, 0.0), else_=price_comp)
+        price_comp = case((ItemOrm.deleted.is_(True), 0.0), else_=price_comp)
         total_price = coalesce(func.sum(price_comp), 0.0)
-        total_quantity = coalesce(func.sum(CartItemOrm.quantity), 0)
+        qty_comp = case((ItemOrm.deleted.is_(True), 0), else_=CartItemOrm.quantity)
+        total_quantity = coalesce(func.sum(qty_comp), 0)
 
         joined_orm_carts = self.session.query(
-            CartOrm.id.label("cart_id"), total_quantity.label("total_qty"), total_price.label("total_price")
+            CartOrm.id.label("cart_id"),
+            total_quantity.label("total_quantity"),
+            total_price.label("total_price")
         ).join(
             CartItemOrm, CartItemOrm.cart_id == CartOrm.id
         ).join(
@@ -112,11 +115,11 @@ class CartRepository:
         if having:
             joined_orm_carts = joined_orm_carts.having(and_(*having))
 
-        cart_ids = [cart.cart_id for cart in joined_orm_carts]
-        if not cart_ids:
-            return []
+        joined_orm_carts = joined_orm_carts.order_by(CartOrm.id).offset(offset).limit(limit)
 
-        orm_carts = self.session.query(CartOrm).filter(CartOrm.id.in_(cart_ids)).offset(offset).limit(limit).all()
+        sub_query = joined_orm_carts.subquery()
+        orm_carts = self.session.query(CartOrm).join(sub_query, sub_query.c.cart_id == CartOrm.id).all()
+
         carts = [CartMapper.to_domain(orm_cart) for orm_cart in orm_carts]
         return carts
 
@@ -138,10 +141,3 @@ class CartRepository:
         self.session.flush()
         orm_cart = self.session.query(CartOrm).filter_by(id=cart_id).first()
         return CartMapper.to_domain(orm_cart)
-
-    def delete(self, cart_id : int) -> None:
-        orm_cart = self.session.query(CartOrm).filter_by(id=cart_id).first()
-        if orm_cart is None:
-            return
-        self.session.delete(orm_cart)
-        self.session.flush()

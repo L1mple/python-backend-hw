@@ -17,6 +17,7 @@ class PatchItem:
 @dataclass(slots=True)
 class CartItem:
     id : int
+    item_id : int
     quantity : int
     name : str
     price : float

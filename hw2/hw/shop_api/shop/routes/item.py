@@ -10,12 +10,12 @@ from ..contracts import ItemRequest, ItemResponse, PatchItemRequest
 
 router = APIRouter(prefix='/item')
 
-@router.get('/')
+@router.get('/', response_model=list[ItemResponse])
 async def get_items(
     offset : Annotated[NonNegativeInt, Query()] = 0,
     limit : Annotated[PositiveInt, Query()] = 10,
-    min_price : Optional[Annotated[NonNegativeFloat, Query()]] = None,
-    max_price : Optional[Annotated[NonNegativeFloat, Query()]] = None,
+    min_price : Annotated[Optional[NonNegativeFloat], Query()] = None,
+    max_price : Annotated[Optional[NonNegativeFloat], Query()] = None,
     show_deleted : bool = False,
     repo : ItemRepository = Depends(get_item_repo)
 ) -> List[ItemResponse]:
@@ -104,19 +104,37 @@ async def patch_item(
     data : PatchItemRequest,
     repo : ItemRepository = Depends(get_item_repo)
 ) -> ItemResponse:
-    entity = repo.patch(item_id, data.as_patch_item())
-    if entity is None:
+    try:
+        entity = repo.patch(item_id, data.as_patch_item())
+        return ItemResponse.from_entity(entity)
+    except ValueError as e:
         raise HTTPException(
             HTTPStatus.NOT_MODIFIED,
-            f"Item with id {item_id} was not found"
-        )
+            str(e)
+        ) from e
 
-    return ItemResponse.from_entity(entity)
 
-@router.delete('/{item_id}')
+
+@router.delete(
+    '/{item_id}',
+    responses={
+        HTTPStatus.OK : {
+            "description" : "Successfully patched item"
+        },
+        HTTPStatus.NOT_FOUND : {
+            "description" : "Failed to delete item as it was not found"
+        }
+    }
+)
 async def delete_item(
     item_id : int,
     repo : ItemRepository = Depends(get_item_repo)
 ):
-    repo.delete(item_id)
-    return Response("")
+    try:
+        repo.delete(item_id)
+        return Response(status_code=HTTPStatus.OK)
+    except ValueError as e:
+        raise HTTPException(
+            HTTPStatus.NOT_FOUND,
+            str(e)
+        ) from e
