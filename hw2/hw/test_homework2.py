@@ -211,17 +211,17 @@ def test_list_items_filters_and_pagination():
     r_del = client.delete(f"/item/{id2}")
     assert r_del.status_code == HTTPStatus.OK
 
-    r = client.get("/item", params={"min_price": 0.0, "max_price": 10.0})
+    r = client.get("/item", params={"min_price": 0.0, "max_price": 10.0, "limit": 1000})
     assert r.status_code == HTTPStatus.OK
     names = [x["name"] for x in r.json()]
     assert "AA" in names and "BB" not in names
 
-    r = client.get("/item", params={"show_deleted": True})
+    r = client.get("/item", params={"show_deleted": True, "limit": 1000})
     assert r.status_code == HTTPStatus.OK
     names = [x["name"] for x in r.json()]
     assert "AA" in names and "BB" in names
 
-    r = client.get("/item", params={"show_deleted": True, "min_price": 4.9, "max_price": 5.1})
+    r = client.get("/item", params={"show_deleted": True, "min_price": 4.9, "max_price": 5.1, "limit": 1000})
     assert r.status_code == HTTPStatus.OK
     data = r.json()
     assert len(data) == 1 and data[0]["name"] == "BB" and data[0]["price"] == 5.0
@@ -229,3 +229,4 @@ def test_list_items_filters_and_pagination():
     r = client.get("/item", params={"show_deleted": True, "offset": 0, "limit": 1})
     assert r.status_code == HTTPStatus.OK
     assert len(r.json()) == 1
+
