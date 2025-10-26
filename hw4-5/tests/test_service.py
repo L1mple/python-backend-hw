@@ -3,10 +3,8 @@ import pytest
 from unittest.mock import Mock, MagicMock
 from http import HTTPStatus
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
-os.environ["DATABASE_URL"] = "postgresql+psycopg2://postgres:password@localhost:5433/shop_db"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from service.main import (
     app,
@@ -15,11 +13,6 @@ from service.main import (
     SqlAlchemyItemRepository, SqlAlchemyCartRepository,
     ItemOrm, CartOrm, ItemInCartOrm, Base
 )
-
-# Database connection
-DATABASE_URL = "postgresql+psycopg2://postgres:password@localhost:5433/shop_db"
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 class TestItemRepository:
     @pytest.fixture
