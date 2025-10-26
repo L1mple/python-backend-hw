@@ -1,0 +1,94 @@
+name: HW5 Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'hw5/**'
+      - '.github/workflows/hw5-tests.yml'
+  pull_request:
+    branches: [ main, master, develop ]
+    paths:
+      - 'hw5/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: shop_user
+          POSTGRES_PASSWORD: shop_password
+          POSTGRES_DB: shop_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('hw5/shop_api/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r hw5/shop_api/requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run tests with coverage
+        env:
+          DATABASE_URL: postgresql://shop_user:shop_password@localhost:5432/shop_db
+          PYTHONPATH: ${{ github.workspace }}/hw5
+        run: |
+          cd hw5
+          pytest tests/ --cov=shop_api --cov-report=term-missing --cov-report=xml --cov-report=html -v
+
+      - name: Check coverage threshold
+        env:
+          PYTHONPATH: ${{ github.workspace }}/hw5
+        run: |
+          cd hw5
+          pytest tests/ --cov=shop_api --cov-fail-under=95 --cov-report=term
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: ./hw5/coverage.xml
+          flags: hw5
+          name: hw5-coverage
+          fail_ci_if_error: false
+
+      - name: Upload coverage HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hw5-coverage-report
+          path: hw5/htmlcov/
+          retention-days: 30
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ github.token }}
+          MINIMUM_GREEN: 95
+          MINIMUM_ORANGE: 90
