@@ -17,7 +17,7 @@ def existing_empty_cart_id() -> int:
     return client.post("/cart").json()["id"]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def existing_items() -> list[int]:
     items = [
         {
@@ -30,7 +30,7 @@ def existing_items() -> list[int]:
     return [client.post("/item", json=item).json()["id"] for item in items]
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(autouse=True)
 def existing_not_empty_carts(existing_items: list[int]) -> list[int]:
     carts = []
 
@@ -282,3 +282,28 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+
+def test_get_nonexistent_cart() -> None:
+    """Тест получения несуществующей корзины"""
+    response = client.get("/cart/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_put_nonexistent_item() -> None:
+    """Тест обновления несуществующего товара"""
+    response = client.put("/item/999999", json={"name": "Test", "price": 10.0})
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_nonexistent_item_to_cart(existing_empty_cart_id: int) -> None:
+    """Тест добавления несуществующего товара в корзину"""
+    response = client.post(f"/cart/{existing_empty_cart_id}/add/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_item_to_nonexistent_cart(existing_item: dict[str, Any]) -> None:
+    """Тест добавления товара в несуществующую корзину"""
+    item_id = existing_item["id"]
+    response = client.post(f"/cart/999999/add/{item_id}")
+    assert response.status_code == HTTPStatus.NOT_FOUND

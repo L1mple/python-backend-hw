@@ -1,0 +1,14 @@
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+*.db
+test_shop.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+

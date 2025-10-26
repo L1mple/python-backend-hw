@@ -16,6 +16,22 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     
+    # Сервис PostgreSQL для тестов
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: shop_user
+          POSTGRES_PASSWORD: shop_password
+          POSTGRES_DB: shop_db_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -31,9 +47,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run tests
+    - name: Run tests with coverage
       working-directory: hw2/hw
       env:
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
+        DATABASE_URL: postgresql://shop_user:shop_password@localhost:5432/shop_db_test
       run: |
-        pytest test_homework2.py -v
+        pytest test_homework2.py -v --cov=shop_api --cov-report=term --cov-fail-under=95
