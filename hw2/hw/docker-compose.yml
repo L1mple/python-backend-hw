@@ -35,5 +35,22 @@ services:
     networks:
       - my-network
       
+  postgres:
+    image: postgres:latest
+    container_name: postgres_container
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: qwerty
+      POSTGRES_DB: shop_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5430:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data/pgdata
+
+volumes:
+  pgdata:
+    driver: local
+      
 networks:
   my-network:

@@ -1,13 +1,39 @@
-from fastapi import FastAPI, Response, Query, HTTPException
-from typing import Optional
+from fastapi import FastAPI, Response, Query, HTTPException, Depends, status
+from typing import List, Optional
+from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
 from prometheus_fastapi_instrumentator import Instrumentator
 
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+# Функция для получения подключения и курсора
+def get_db():
+    conn = psycopg2.connect(
+        dbname="shop_db",
+        user="user",
+        password="qwerty",
+        host="localhost",
+        port=5430
+    )
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+def get_cursor(conn=Depends(get_db)):
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        yield cur
+        conn.commit()
+    except:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+
 app = FastAPI(title="Shop API")
 Instrumentator().instrument(app).expose(app)
-
-items_storage = {} 
-carts_storage = {} 
 
 class Item(BaseModel):
     id: int
@@ -36,99 +62,161 @@ class Cart(BaseModel):
     price: float
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Создаем подключение и курсор вручную, т.к. Depends не работает здесь
+    conn = psycopg2.connect(
+        dbname="shop_db",
+        user="user",
+        password="qwerty",
+        host="localhost",
+        port=5430
+    )
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS items (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            price FLOAT CHECK (price > 0) NOT NULL,
+            deleted BOOLEAN DEFAULT FALSE NOT NULL
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS carts (
+            id SERIAL PRIMARY KEY,
+            price FLOAT NOT NULL
+        );
+        """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS cart_items (
+            id SERIAL PRIMARY KEY,
+            cart_id INTEGER NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
+            item_id INTEGER NOT NULL REFERENCES items(id),
+            quantity INTEGER NOT NULL CHECK (quantity > 0),
+            available BOOLEAN DEFAULT TRUE NOT NULL
+        );
+        """)
+        conn.commit()
+        yield
+    finally:
+        cur.close()
+        conn.close()
+
+app.router.lifespan_context = lifespan
+
 #Работа с товарами
 #----------------------------------
 
-@app.post("/item", response_model=Item, status_code=201)
-def create_item(item: ItemForCreateUpd):
-    if items_storage:
-        id = max(items_storage.keys()) + 1
-    else:
-        id = 1
-    deleted = False
-    items_storage[id] = Item(id=id, name=item.name, price=item.price, deleted=deleted)
-    return items_storage[id]
+# Создание товара
+@app.post("/item", response_model=Item, status_code=status.HTTP_201_CREATED)
+def create_item(item: ItemForCreateUpd, cur=Depends(get_cursor)):
+    cur.execute(
+        "INSERT INTO items (name, price, deleted) VALUES (%s, %s, FALSE) RETURNING id, name, price, deleted;",
+        (item.name, item.price)
+    )
+    new_item = cur.fetchone()
+    return new_item
 
+# Полное обновление товара (PUT)
 @app.put("/item/{id}", response_model=Item)
-def put_item(id: int, item: ItemForCreateUpd):
-    if id not in items_storage:
-        return {"error": "Item not found"}
-    stored_item = items_storage[id]
-    stored_item.name = item.name
-    stored_item.price = item.price
-    items_storage[id] = stored_item
-    return stored_item
+def put_item(id: int, item: ItemForCreateUpd, cur=Depends(get_cursor)):
+    cur.execute("SELECT id FROM items WHERE id = %s AND deleted = FALSE;", (id,))
+    if cur.fetchone() is None:
+        raise HTTPException(status_code=404, detail="Item not found")
 
-@app.get("/item", response_model=list[Item])
+    cur.execute(
+        "UPDATE items SET name = %s, price = %s WHERE id = %s RETURNING id, name, price, deleted;",
+        (item.name, item.price, id)
+    )
+    updated_item = cur.fetchone()
+    return updated_item
+
+# Получение списка товаров с фильтрами и пагинацией
+@app.get("/item", response_model=List[Item])
 def get_items(
     offset: int = Query(0, ge=0),
     limit: int = Query(10, gt=0),
     min_price: Optional[float] = Query(None, ge=0),
     max_price: Optional[float] = Query(None, ge=0),
-    show_deleted: bool = False
+    show_deleted: bool = False,
+    cur=Depends(get_cursor)
 ):
-    all_items = list(items_storage.values())
+    query = "SELECT id, name, price, deleted FROM items WHERE TRUE"
+    params = []
 
-    filtered_items = [
-        item for item in all_items
-        if (show_deleted or not item.deleted)
-        and (min_price is None or item.price >= min_price)
-        and (max_price is None or item.price <= max_price)
-    ]
-    
-    return filtered_items[offset : offset + limit]
+    if not show_deleted:
+        query += " AND deleted = FALSE"
+    if min_price is not None:
+        query += " AND price >= %s"
+        params.append(min_price)
+    if max_price is not None:
+        query += " AND price <= %s"
+        params.append(max_price)
 
+    query += " ORDER BY id OFFSET %s LIMIT %s"
+    params.extend([offset, limit])
+
+    cur.execute(query, tuple(params))
+    items = cur.fetchall()
+    return items
+
+# Получение товара по id
 @app.get("/item/{id}", response_model=Item)
-def get_item_id(id: int):
-    if id not in items_storage:
-        raise HTTPException(status_code=404)
-    item = items_storage[id]
-    if item.deleted:
-        raise HTTPException(status_code=404)
+def get_item_id(id: int, cur=Depends(get_cursor)):
+    cur.execute("SELECT id, name, price, deleted FROM items WHERE id = %s AND deleted = FALSE;", (id,))
+    item = cur.fetchone()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
     return item
 
+# Логическое удаление товара
 @app.delete("/item/{id}", response_model=Item)
-def delete_item(id: int):
-    if id not in items_storage:
-        return {"error": "Item not found"}
-    stored_item = items_storage[id]
-    stored_item.deleted = True
-    return stored_item
+def delete_item(id: int, cur=Depends(get_cursor)):
+    cur.execute("SELECT id FROM items WHERE id = %s AND deleted = FALSE;", (id,))
+    if cur.fetchone() is None:
+        raise HTTPException(status_code=404, detail="Item not found")
 
+    cur.execute(
+        "UPDATE items SET deleted = TRUE WHERE id = %s RETURNING id, name, price, deleted;",
+        (id,)
+    )
+    deleted_item = cur.fetchone()
+    return deleted_item
+
+# Частичное обновление товара (PATCH)
 @app.patch("/item/{id}", response_model=Item)
-def patch_item(id: int, item: ItemForPatch):
-    if id not in items_storage:
-        raise HTTPException(status_code=404)
-    stored_item = items_storage[id]
-    if stored_item.deleted:
-        return Response(status_code=304)
-    if item.name is not None:
-        stored_item.name = item.name
-    if item.price is not None:
-        stored_item.price = item.price
-    items_storage[id] = stored_item
-    return stored_item
+def patch_item(id: int, item: ItemForPatch, cur=Depends(get_cursor)):
+    cur.execute("SELECT id, name, price, deleted FROM items WHERE id = %s AND deleted = FALSE;", (id,))
+    stored_item = cur.fetchone()
+    if stored_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    new_name = item.name if item.name is not None else stored_item['name']
+    new_price = item.price if item.price is not None else stored_item['price']
+
+    cur.execute(
+        "UPDATE items SET name = %s, price = %s WHERE id = %s RETURNING id, name, price, deleted;",
+        (new_name, new_price, id)
+    )
+    updated_item = cur.fetchone()
+    return updated_item
 
 
 #Работа с корзиной
 #----------------------------------
 
-@app.post("/cart", status_code=201)
-def post_cart(response: Response):
-    if carts_storage:
-        id = max(carts_storage.keys()) + 1
-    else:
-        id = 1
-    
-    new_cart = {
-        "id": id,
-        "items": {}
-    }
-    carts_storage[id] = new_cart
-    response.headers["location"] = f"/cart/{id}"
-    return {"id": id}
+# Создание новой корзины
+@app.post("/cart", status_code=status.HTTP_201_CREATED)
+def post_cart(response: Response, cur=Depends(get_cursor)):
+    # Создаем пустую корзину с ценой 0
+    cur.execute("INSERT INTO carts (price) VALUES (0) RETURNING id;")
+    cart_id = cur.fetchone()['id']
+    response.headers["location"] = f"/cart/{cart_id}"
+    return {"id": cart_id}
 
-@app.get("/cart", response_model=list[Cart])
+# Получение списка корзин с фильтрами
+@app.get("/cart", response_model=List[Cart])
 def get_carts(
     offset: int = Query(0, ge=0),
     limit: int = Query(10, gt=0),
@@ -136,29 +224,47 @@ def get_carts(
     max_price: Optional[float] = Query(None, ge=0),
     min_quantity: Optional[int] = Query(None, ge=0),
     max_quantity: Optional[int] = Query(None, ge=0),
+    cur=Depends(get_cursor)
 ):
-    all_carts = list(carts_storage.values())
+    # Получаем корзины с пагинацией
+    cur.execute("""
+        SELECT id, price FROM carts
+        ORDER BY id
+        OFFSET %s LIMIT %s;
+    """, (offset, limit))
+    carts = cur.fetchall()
+
     filtered_carts = []
-    
-    for cart in all_carts:
-        cart_items = []
+
+    for cart in carts:
+        cart_id = cart['id']
+
+        # Получаем элементы корзины с данными о товарах
+        cur.execute("""
+            SELECT ci.item_id, ci.quantity, i.name, i.deleted, i.price
+            FROM cart_items ci
+            JOIN items i ON ci.item_id = i.id
+            WHERE ci.cart_id = %s;
+        """, (cart_id,))
+        items = cur.fetchall()
+
         total_quantity = 0
         total_price = 0
-        
-        for item_id, quantity in cart["items"].items():
-            item = items_storage.get(item_id)
-            if item:
-                available = not item.deleted
-                cart_items.append({
-                    "id": item_id,
-                    "name": item.name,
-                    "quantity": quantity,
-                    "available": available
-                })
-                if available:
-                    total_price += item.price * quantity
-                total_quantity += quantity
-        
+        cart_items = []
+
+        for item in items:
+            available = not item['deleted']
+            cart_items.append(CartItem(
+                id=item['item_id'],
+                name=item['name'],
+                quantity=item['quantity'],
+                available=available
+            ))
+            if available:
+                total_price += item['price'] * item['quantity']
+            total_quantity += item['quantity']
+
+        # Фильтрация по количеству и цене
         if min_quantity is not None and total_quantity < min_quantity:
             continue
         if max_quantity is not None and total_quantity > max_quantity:
@@ -168,73 +274,95 @@ def get_carts(
         if max_price is not None and total_price > max_price:
             continue
 
-        filtered_carts.append({
-            "id": cart["id"],
-            "items": cart_items,
-            "price": total_price
-        })
-    
-    return filtered_carts[offset : offset + limit]
+        filtered_carts.append(Cart(
+            id=cart_id,
+            items=cart_items,
+            price=total_price
+        ))
 
+    return filtered_carts
+
+# Получение корзины по id
 @app.get("/cart/{id}", response_model=Cart)
-def get_cart_id(id: int):
-    if id not in carts_storage:
-        return {"error": "Cart not found"}
-    
-    cart = carts_storage[id]
-    cart_items = []
-    total_price = 0
-    
-    for item_id, quantity in cart["items"].items():
-        item = items_storage.get(item_id)
-        if item:
-            available = not item.deleted
-            cart_items.append(CartItem(
-                id=item_id,
-                name=item.name,
-                quantity=quantity,
-                available=available
-            ))
-            if available:
-                total_price += item.price * quantity
-    
-    return Cart(
-        id=cart["id"],
-        items=cart_items,
-        price=total_price
-    )
+def get_cart_id(id: int, cur=Depends(get_cursor)):
+    # Проверяем, что корзина существует
+    cur.execute("SELECT id FROM carts WHERE id = %s;", (id,))
+    if cur.fetchone() is None:
+        raise HTTPException(status_code=404, detail="Cart not found")
 
-@app.post("/cart/{cart_id}/add/{item_id}", response_model=Cart)
-def add_item_to_cart(cart_id: int, item_id: int): 
-    if cart_id not in carts_storage:
-        return {"error": "Cart not found"}
-    if item_id not in items_storage:
-        return {"error": "Item not found"}
-    
-    cart = carts_storage[cart_id]
-
-    if item_id in cart["items"]:
-        cart["items"][item_id] += 1
-    else:
-        cart["items"][item_id] = 1
+    # Получаем элементы корзины
+    cur.execute("""
+        SELECT ci.item_id, ci.quantity, i.name, i.deleted, i.price
+        FROM cart_items ci
+        JOIN items i ON ci.item_id = i.id
+        WHERE ci.cart_id = %s;
+    """, (id,))
+    items = cur.fetchall()
 
     cart_items = []
     total_price = 0
-    
-    for item_id_in_cart, quantity in cart["items"].items():
-        item = items_storage[item_id_in_cart]
-        available = not item.deleted
+
+    for item in items:
+        available = not item['deleted']
         cart_items.append(CartItem(
-            id=item_id_in_cart,
-            name=item.name,
-            quantity=quantity,
+            id=item['item_id'],
+            name=item['name'],
+            quantity=item['quantity'],
             available=available
         ))
         if available:
-            total_price += item.price * quantity
-    
+            total_price += item['price'] * item['quantity']
+
     return Cart(
-        id=cart["id"],
+        id=id,
         items=cart_items,
         price=total_price
     )
+
+# Добавление товара в корзину
+@app.post("/cart/{cart_id}/add/{item_id}", response_model=Cart)
+def add_item_to_cart(cart_id: int, item_id: int, cur=Depends(get_cursor)):
+    # Проверяем, что корзина существует
+    cur.execute("SELECT id FROM carts WHERE id = %s;", (cart_id,))
+    if cur.fetchone() is None:
+        raise HTTPException(status_code=404, detail="Cart not found")
+
+    # Проверяем, что товар существует и не удалён
+    cur.execute("SELECT id, deleted FROM items WHERE id = %s;", (item_id,))
+    item = cur.fetchone()
+    if item is None or item['deleted']:
+        raise HTTPException(status_code=404, detail="Item not found or deleted")
+
+    # Проверяем, есть ли уже этот товар в корзине
+    cur.execute("""
+        SELECT quantity FROM cart_items
+        WHERE cart_id = %s AND item_id = %s;
+    """, (cart_id, item_id))
+    existing = cur.fetchone()
+
+    if existing:
+        # Увеличиваем количество на 1
+        cur.execute("""
+            UPDATE cart_items SET quantity = quantity + 1
+            WHERE cart_id = %s AND item_id = %s;
+        """, (cart_id, item_id))
+    else:
+        # Вставляем новую запись
+        cur.execute("""
+            INSERT INTO cart_items (cart_id, item_id, quantity, available)
+            VALUES (%s, %s, 1, TRUE);
+        """, (cart_id, item_id))
+
+    # Обновляем общую цену корзины
+    cur.execute("""
+        SELECT SUM(i.price * ci.quantity)
+        FROM cart_items ci
+        JOIN items i ON ci.item_id = i.id
+        WHERE ci.cart_id = %s AND i.deleted = FALSE;
+    """, (cart_id,))
+    total_price = cur.fetchone()[0] or 0
+
+    cur.execute("UPDATE carts SET price = %s WHERE id = %s;", (total_price, cart_id))
+
+    # Возвращаем обновленную корзину (используем уже готовый эндпоинт)
+    return get_cart_id(cart_id, cur)
