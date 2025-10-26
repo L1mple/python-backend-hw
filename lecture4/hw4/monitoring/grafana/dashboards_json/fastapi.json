@@ -1,0 +1,249 @@
+{
+  "title": "FastAPI / Prometheus (shop_api) — Pro",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 3,
+  "editable": false,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "job",
+        "label": "Job",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(http_requests_total, job)",
+        "includeAll": false,
+        "multi": false,
+        "current": { "text": "shop_api", "value": "shop_api" }
+      },
+      {
+        "name": "handler",
+        "label": "Handler",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(http_requests_total{job=\"$job\",handler!=\"none\"}, handler)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": ".*" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "RPS by paths",
+      "targets": [
+        {
+          "expr": "sum by (handler) (rate(http_requests_total{job=\"$job\",handler!=\"none\",handler=~\"$handler\"}[1m]))",
+          "legendFormat": "{{handler}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "req/s", "decimals": 2 },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull","max","mean"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, handler) (rate(http_request_duration_seconds_bucket{job=\"$job\",handler!=\"none\",handler=~\"$handler\"}[5m]))) * 1000",
+          "legendFormat": "{{handler}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "decimals": 0, "min": 0 },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull","max","mean"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "type": "heatmap",
+      "title": "heatmap ",
+      "targets": [
+        {
+          "expr": "sum by (le) (rate(http_request_duration_seconds_bucket{job=\"$job\",handler!=\"none\",handler=~\"$handler\"}[5m]))"
+        }
+      ],
+      "dataFormat": "tsbuckets",
+      "fieldConfig": { "defaults": { "unit": "ops" } },
+      "options": {
+        "yAxis": { "unit": "s" },
+        "legend": { "show": true },
+        "tooltip": { "show": true }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Errors 4xx / 5xx (RPS)",
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(http_requests_total{job=\"$job\",handler!=\"none\",handler=~\"$handler\",status=~\"4..\"}[5m]))",
+          "legendFormat": "4xx {{status}}"
+        },
+        {
+          "expr": "sum by (status) (rate(http_requests_total{job=\"$job\",handler!=\"none\",handler=~\"$handler\",status=~\"5..\"}[5m]))",
+          "legendFormat": "5xx {{status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "req/s", "decimals": 3, "min": 0 } },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull","sum"] }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "aqw qwery len",
+      "targets": [
+        {
+          "expr": "sum by (handler) (rate(http_request_size_bytes_sum{job=\"$job\",handler!=\"none\",handler=~\"$handler\"}[5m])) / sum by (handler) (rate(http_request_size_bytes_count{job=\"$job\",handler!=\"none\",handler=~\"$handler\"}[5m]))",
+          "legendFormat": "{{handler}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 0, "min": 0 } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+    },
+    {
+      "type": "timeseries",
+      "title": "aqw ans len",
+      "targets": [
+        {
+          "expr": "sum by (handler) (rate(http_response_size_bytes_sum{job=\"$job\",handler!=\"none\",handler=~\"$handler\"}[5m])) / sum by (handler) (rate(http_response_size_bytes_count{job=\"$job\",handler!=\"none\",handler=~\"$handler\"}[5m]))",
+          "legendFormat": "{{handler}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 0, "min": 0 } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+    },
+    {
+      "type": "stat",
+      "title": "carts (rate/5m)",
+      "targets": [
+        { "expr": "rate(app_cart_created_total{job=\"$job\"}[5m])" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 3, "min": 0 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 }
+    },
+    {
+      "type": "stat",
+      "title": "added items (rate/5m)",
+      "targets": [
+        { "expr": "rate(app_item_added_total{job=\"$job\"}[5m])" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 3, "min": 0 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 24 }
+    },
+    {
+      "type": "stat",
+      "title": "CPU 5m",
+      "targets": [
+        { "expr": "avg(rate(process_cpu_seconds_total{job=\"$job\"}[5m]))" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "cores", "decimals": 2, "min": 0 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 24 }
+    },
+    {
+      "type": "stat",
+      "title": "mem RSS",
+      "targets": [
+        { "expr": "process_resident_memory_bytes{job=\"$job\"}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 0, "min": 0 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 24 }
+    },
+    {
+      "type": "stat",
+      "title": "file desc",
+      "targets": [
+        { "expr": "process_open_fds{job=\"$job\"}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0, "min": 0 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 24 }
+    },
+    {
+      "type": "stat",
+      "title": "uptime",
+      "targets": [
+        { "expr": "time() - process_start_time_seconds{job=\"$job\"}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 0, "min": 0 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 28 }
+    },
+    {
+      "type": "timeseries",
+      "title": "GC collections/sec",
+      "targets": [
+        {
+          "expr": "rate(python_gc_collections_total{job=\"$job\",generation=\"0\"}[5m])",
+          "legendFormat": "gen0"
+        },
+        {
+          "expr": "rate(python_gc_collections_total{job=\"$job\",generation=\"1\"}[5m])",
+          "legendFormat": "gen1"
+        },
+        {
+          "expr": "rate(python_gc_collections_total{job=\"$job\",generation=\"2\"}[5m])",
+          "legendFormat": "gen2"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 3, "min": 0 } },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull","max","mean"] }
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 28 }
+    },
+    {
+      "type": "stat",
+      "title": "Prometheus scrape",
+      "targets": [
+        { "expr": "max(up{job=\"$job\"})" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 32 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Prometheus scrape duration / samples",
+      "targets": [
+        { "expr": "avg(scrape_duration_seconds{job=\"$job\"})", "legendFormat": "scrape duration (s)" },
+        { "expr": "sum(scrape_samples_scraped{job=\"$job\"})", "legendFormat": "samples scraped" }
+      ],
+      "fieldConfig": { "defaults": { "decimals": 3, "min": 0 } },
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 36 }
+    }
+  ]
+}
