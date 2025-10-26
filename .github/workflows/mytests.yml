@@ -9,6 +9,11 @@ jobs:
   tests:
     runs-on: ubuntu-latest
 
+    # Все run-скрипты выполняем из папки hw2/hw
+    defaults:
+      run:
+        working-directory: hw2/hw
+
     services:
       postgres:
         image: postgres:16
@@ -26,7 +31,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+psycopg://shop:shop@localhost:5432/shop
-      PYTHONPATH: .
+      PYTHONPATH: .   # т.к. рабочая директория = hw2/hw
 
     steps:
       - name: Checkout
@@ -36,6 +41,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Install Postgres client (psql)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
 
       - name: Install deps
         run: |
@@ -50,7 +60,7 @@ jobs:
             sleep 1
           done
 
-      # опционально: чистое состояние БД перед тестами
+      # Можно убрать, если не нужно чистить БД перед тестами
       - name: Reset DB (optional)
         run: |
           PGPASSWORD=shop psql -h localhost -U shop -d shop -c "TRUNCATE TABLE cart_items, carts, items RESTART IDENTITY CASCADE;" || true
@@ -74,4 +84,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-html
-          path: htmlcov
+          path: hw2/hw/htmlcov
