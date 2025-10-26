@@ -1,0 +1,9 @@
+[coverage:run]
+concurrency = thread,greenlet
+branch = True
+dynamic_context = test_function
+
+[coverage:report]
+fail_under = 95
+show_missing = True
+skip_covered = False

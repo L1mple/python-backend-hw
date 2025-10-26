@@ -1,0 +1,47 @@
+name: "Tests with coverage (HW2)"
+
+on:
+  pull_request:
+    paths: [ 'hw2/hw/**' ]
+  push:
+    paths: [ 'hw2/hw/**' ]
+
+jobs:
+  test-hw2:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_DB: testing
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: admin
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.13
+    
+    - name: Install dependencies
+      working-directory: hw2/hw
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests
+      working-directory: hw2/hw
+      env:
+        PYTHONPATH: ${{ github.workspace }}/hw2/hw
+      run: |
+        make coverage
