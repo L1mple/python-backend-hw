@@ -4,9 +4,16 @@ from typing import Annotated, Any
 import random
 import string
 from prometheus_fastapi_instrumentator import Instrumentator
+from sqlalchemy.orm import Session
+from shop_api.database import init_db, get_db, DBItem, DBCart, DBCartItem
 
 app = FastAPI(title="Shop API")
 Instrumentator().instrument(app).expose(app)
+
+# Initialize database on startup
+@app.on_event("startup")
+def startup_event():
+    init_db()
 
 
 # ============ Data Models ============
@@ -53,13 +60,6 @@ class Cart(BaseModel):
     items: list[CartItem]
     price: float
 
-
-# ============ In-Memory Storage ============
-
-items_db: dict[int, Item] = {}
-carts_db: dict[int, dict[int, int]] = {}  # cart_id -> {item_id -> quantity}
-item_counter = 0
-cart_counter = 0
 
 # ============ WebSocket Chat ============
 
@@ -120,21 +120,20 @@ async def chat_endpoint(websocket: WebSocket, chat_name: str):
 
 @app.post("/item", response_model=Item, status_code=status.HTTP_201_CREATED)
 def create_item(item: ItemCreate):
-    global item_counter
-    item_counter += 1
-    new_item = Item(id=item_counter, name=item.name, price=item.price, deleted=False)
-    items_db[item_counter] = new_item
-    return new_item
+    with get_db() as db:
+        db_item = DBItem(name=item.name, price=item.price, deleted=False)
+        db.add(db_item)
+        db.flush()
+        return Item(id=db_item.id, name=db_item.name, price=db_item.price, deleted=db_item.deleted)
 
 
 @app.get("/item/{id}", response_model=Item)
 def get_item(id: int):
-    if id not in items_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    item = items_db[id]
-    if item.deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return item
+    with get_db() as db:
+        db_item = db.query(DBItem).filter(DBItem.id == id).first()
+        if not db_item or db_item.deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+        return Item(id=db_item.id, name=db_item.name, price=db_item.price, deleted=db_item.deleted)
 
 
 @app.get("/item", response_model=list[Item])
@@ -145,98 +144,104 @@ def get_items(
         max_price: Annotated[float | None, Query(ge=0)] = None,
         show_deleted: bool = False
 ):
-    filtered_items = []
+    with get_db() as db:
+        query = db.query(DBItem)
 
-    for item in items_db.values():
-        # Filter by deleted status
-        if not show_deleted and item.deleted:
-            continue
+        if not show_deleted:
+            query = query.filter(DBItem.deleted == False)
 
-        # Filter by price
-        if min_price is not None and item.price < min_price:
-            continue
-        if max_price is not None and item.price > max_price:
-            continue
+        if min_price is not None:
+            query = query.filter(DBItem.price >= min_price)
+        if max_price is not None:
+            query = query.filter(DBItem.price <= max_price)
 
-        filtered_items.append(item)
-
-    return filtered_items[offset:offset + limit]
+        db_items = query.offset(offset).limit(limit).all()
+        return [Item(id=item.id, name=item.name, price=item.price, deleted=item.deleted) for item in db_items]
 
 
 @app.put("/item/{id}", response_model=Item)
 def update_item(id: int, item: ItemUpdate):
-    if id not in items_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    with get_db() as db:
+        db_item = db.query(DBItem).filter(DBItem.id == id).first()
+        if not db_item:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    existing_item = items_db[id]
-    existing_item.name = item.name
-    existing_item.price = item.price
+        db_item.name = item.name
+        db_item.price = item.price
+        db.flush()
 
-    return existing_item
+        return Item(id=db_item.id, name=db_item.name, price=db_item.price, deleted=db_item.deleted)
 
 
 @app.patch("/item/{id}", response_model=Item)
 def patch_item(id: int, item: ItemPatch):
-    if id not in items_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    with get_db() as db:
+        db_item = db.query(DBItem).filter(DBItem.id == id).first()
+        if not db_item:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    existing_item = items_db[id]
+        # Cannot patch deleted items
+        if db_item.deleted:
+            return Response(status_code=status.HTTP_304_NOT_MODIFIED)
 
-    # Cannot patch deleted items
-    if existing_item.deleted:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+        # Update only provided fields
+        if item.name is not None:
+            db_item.name = item.name
+        if item.price is not None:
+            db_item.price = item.price
 
-    # Update only provided fields
-    if item.name is not None:
-        existing_item.name = item.name
-    if item.price is not None:
-        existing_item.price = item.price
-
-    return existing_item
+        db.flush()
+        return Item(id=db_item.id, name=db_item.name, price=db_item.price, deleted=db_item.deleted)
 
 
 @app.delete("/item/{id}")
 def delete_item(id: int):
-    if id not in items_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    with get_db() as db:
+        db_item = db.query(DBItem).filter(DBItem.id == id).first()
+        if not db_item:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    items_db[id].deleted = True
-    return Response(status_code=status.HTTP_200_OK)
+        db_item.deleted = True
+        db.flush()
+        return Response(status_code=status.HTTP_200_OK)
 
 
 # ============ Cart Endpoints ============
 
 @app.post("/cart", status_code=status.HTTP_201_CREATED)
 def create_cart(response: Response):
-    global cart_counter
-    cart_counter += 1
-    carts_db[cart_counter] = {}
+    with get_db() as db:
+        db_cart = DBCart()
+        db.add(db_cart)
+        db.flush()
 
-    response.headers["location"] = f"/cart/{cart_counter}"
-    return {"id": cart_counter}
+        response.headers["location"] = f"/cart/{db_cart.id}"
+        return {"id": db_cart.id}
 
 
 @app.get("/cart/{id}", response_model=Cart)
 def get_cart(id: int):
-    if id not in carts_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    with get_db() as db:
+        db_cart = db.query(DBCart).filter(DBCart.id == id).first()
+        if not db_cart:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    cart_items_dict = carts_db[id]
-    cart_items = []
-    total_price = 0.0
+        cart_items_db = db.query(DBCartItem).filter(DBCartItem.cart_id == id).all()
+        cart_items = []
+        total_price = 0.0
 
-    for item_id, quantity in cart_items_dict.items():
-        if item_id in items_db:
-            item = items_db[item_id]
-            cart_items.append(CartItem(
-                id=item.id,
-                name=item.name,
-                quantity=quantity,
-                available=not item.deleted
-            ))
-            total_price += item.price * quantity
+        for cart_item in cart_items_db:
+            db_item = db.query(DBItem).filter(DBItem.id == cart_item.item_id).first()
+            if db_item:
+                cart_items.append(CartItem(
+                    id=db_item.id,
+                    name=db_item.name,
+                    quantity=cart_item.quantity,
+                    available=not db_item.deleted
+                ))
+                total_price += db_item.price * cart_item.quantity
 
-    return Cart(id=id, items=cart_items, price=total_price)
+        return Cart(id=id, items=cart_items, price=total_price)
 
 
 @app.get("/cart", response_model=list[Cart])
@@ -248,43 +253,55 @@ def get_carts(
         min_quantity: Annotated[int | None, Query(ge=0)] = None,
         max_quantity: Annotated[int | None, Query(ge=0)] = None
 ):
-    filtered_carts = []
+    with get_db() as db:
+        db_carts = db.query(DBCart).all()
+        filtered_carts = []
 
-    for cart_id in carts_db:
-        cart = get_cart(cart_id)
+        for db_cart in db_carts:
+            cart = get_cart(db_cart.id)
 
-        # Filter by price
-        if min_price is not None and cart.price < min_price:
-            continue
-        if max_price is not None and cart.price > max_price:
-            continue
+            # Filter by price
+            if min_price is not None and cart.price < min_price:
+                continue
+            if max_price is not None and cart.price > max_price:
+                continue
 
-        # Calculate total quantity
-        total_quantity = sum(item.quantity for item in cart.items)
+            # Calculate total quantity
+            total_quantity = sum(item.quantity for item in cart.items)
 
-        # Filter by quantity
-        if min_quantity is not None and total_quantity < min_quantity:
-            continue
-        if max_quantity is not None and total_quantity > max_quantity:
-            continue
+            # Filter by quantity
+            if min_quantity is not None and total_quantity < min_quantity:
+                continue
+            if max_quantity is not None and total_quantity > max_quantity:
+                continue
 
-        filtered_carts.append(cart)
+            filtered_carts.append(cart)
 
-    return filtered_carts[offset:offset + limit]
+        return filtered_carts[offset:offset + limit]
 
 
 @app.post("/cart/{cart_id}/add/{item_id}")
 def add_item_to_cart(cart_id: int, item_id: int):
-    if cart_id not in carts_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    if item_id not in items_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    with get_db() as db:
+        db_cart = db.query(DBCart).filter(DBCart.id == cart_id).first()
+        if not db_cart:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    cart = carts_db[cart_id]
+        db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
+        if not db_item:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-    if item_id in cart:
-        cart[item_id] += 1
-    else:
-        cart[item_id] = 1
+        # Check if item already in cart
+        cart_item = db.query(DBCartItem).filter(
+            DBCartItem.cart_id == cart_id,
+            DBCartItem.item_id == item_id
+        ).first()
 
-    return Response(status_code=status.HTTP_200_OK)
+        if cart_item:
+            cart_item.quantity += 1
+        else:
+            cart_item = DBCartItem(cart_id=cart_id, item_id=item_id, quantity=1)
+            db.add(cart_item)
+
+        db.flush()
+        return Response(status_code=status.HTTP_200_OK)
