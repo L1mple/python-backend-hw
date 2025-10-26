@@ -1,4 +1,4 @@
-version: "3"
+version: "3.8"
 
 services:
 
@@ -8,8 +8,23 @@ services:
       dockerfile: ./Dockerfile
       target: local
     restart: always
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/mydb
     ports:
       - 8080:8080
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   grafana:
     image: grafana/grafana:latest
@@ -37,3 +52,4 @@ services:
 
 volumes:
   grafana-data:
+  postgres_data:
