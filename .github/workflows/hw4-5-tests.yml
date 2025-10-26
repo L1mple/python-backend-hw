@@ -27,7 +27,6 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+psycopg2://user:password@localhost:5432/hw2_db
-      PYTHONPATH: ./hw2/hw
 
     steps:
       - name: Checkout repo
