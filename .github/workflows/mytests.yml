@@ -1,0 +1,98 @@
+name: HW2 tests (fork)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    # все команды запускаем из hw2/hw
+    defaults:
+      run:
+        working-directory: hw2/hw
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: shop
+          POSTGRES_USER: shop
+          POSTGRES_PASSWORD: shop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U shop -d shop"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    env:
+      DATABASE_URL: postgresql+psycopg://shop:shop@localhost:5432/shop
+      PYTHONPATH: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Postgres client (psql)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..60}; do
+            pg_isready -h localhost -p 5432 -U shop -d shop && break
+            sleep 1
+          done
+
+      # 1) создаём схему до truncate (эквивалент твоего Base.metadata.create_all)
+      - name: Init DB schema
+        run: |
+          python - <<'PY'
+          from shop_api.db import engine, Base
+          from shop_api import models  # важно: регистрирует таблицы
+          Base.metadata.create_all(bind=engine)
+          print("schema OK")
+          PY
+
+      # 2) теперь можно чистить (ID с 1, пустые таблицы)
+      - name: Reset DB
+        run: |
+          PGPASSWORD=shop psql -h localhost -U shop -d shop \
+            -c "TRUNCATE TABLE cart_items, carts, items RESTART IDENTITY CASCADE;"
+
+      # 3) тесты + порог покрытия
+      - name: Run tests with coverage gate (>=95%)
+        run: |
+          pytest -vv \
+            --cov=shop_api \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=95 \
+            test_homework2.py
+
+      - name: HTML coverage report
+        if: always()
+        run: |
+          pytest --cov=shop_api --cov-report=html:htmlcov -q
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: hw2/hw/htmlcov
