@@ -1,8 +1,16 @@
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response
-from pydantic import NonNegativeInt, PositiveInt
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Query,
+    Response,
+)
+from pydantic import (
+    NonNegativeInt,
+    PositiveInt,
+)
 
 from hw2.rest_example import store
 
@@ -17,8 +25,8 @@ router = APIRouter(prefix="/pokemon")
 
 @router.get("/")
 async def get_pokemon_list(
-    offset: Annotated[NonNegativeInt, Query()] = 0,
-    limit: Annotated[PositiveInt, Query()] = 10,
+        offset: Annotated[NonNegativeInt, Query()] = 0,
+        limit: Annotated[PositiveInt, Query()] = 10,
 ) -> list[PokemonResponse]:
     return [PokemonResponse.from_entity(e) for e in store.get_many(offset, limit)]
 
@@ -94,9 +102,9 @@ async def patch_pokemon(id: int, info: PatchPokemonRequest) -> PokemonResponse:
     }
 )
 async def put_pokemon(
-    id: int,
-    info: PokemonRequest,
-    upsert: Annotated[bool, Query()] = False,
+        id: int,
+        info: PokemonRequest,
+        upsert: Annotated[bool, Query()] = False,
 ) -> PokemonResponse:
     entity = (
         store.upsert(id, info.as_pokemon_info())
