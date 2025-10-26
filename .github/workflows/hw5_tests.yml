@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: hw4_5/app/requirements.txt
+          cache-dependency-path: hw4_5/requirements.txt
 
       - name: Install deps
         run: pip install -r hw4_5/requirements.txt
