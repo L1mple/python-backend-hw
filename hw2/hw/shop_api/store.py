@@ -24,11 +24,6 @@ def get_database_url():
     default_url = "postgresql://shop_user:shop_password@postgres:5432/shop_db"
     url = os.getenv('DATABASE_URL', default_url)
     
-    if isinstance(url, bytes):
-        url = url.decode('latin-1')
-
-    url = url.strip()
-    
     return url
 
 class DatabaseStore:
