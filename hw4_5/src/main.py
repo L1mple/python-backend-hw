@@ -4,7 +4,7 @@ from src.routers import item_router, cart_router
 
 
 
-pg_app = FastAPI()
+pg_app = FastAPI(title="Shop API")
 
 pg_app.include_router(
     router=cart_router,
