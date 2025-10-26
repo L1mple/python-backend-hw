@@ -126,4 +126,4 @@ jobs:
     - name: Test Docker Compose
       working-directory: ./hw2/hw
       run: |
-        docker-compose config
+        docker compose config
