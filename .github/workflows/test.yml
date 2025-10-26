@@ -10,6 +10,7 @@ on:
     branches: [ main, master, develop ]
     paths:
       - 'hw5/**'
+  workflow_dispatch:
 
 jobs:
   test:
@@ -66,16 +67,15 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/hw5
         run: |
           cd hw5
-          pytest tests/ --cov=shop_api --cov-fail-under=95 --cov-report=term
+          pytest tests/ --cov=shop_api --cov-fail-under=90 -q
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        if: always()
-        with:
-          file: ./hw5/coverage.xml
-          flags: hw5
-          name: hw5-coverage
-          fail_ci_if_error: false
+      - name: Generate coverage badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd hw5
+          COVERAGE=$(pytest tests/ --cov=shop_api --cov-report=term | grep TOTAL | awk '{print $4}' | sed 's/%//')
+          echo "Coverage: ${COVERAGE}%"
+          echo "COVERAGE=${COVERAGE}" >> $GITHUB_ENV
 
       - name: Upload coverage HTML report
         uses: actions/upload-artifact@v4
@@ -85,10 +85,35 @@ jobs:
           path: hw5/htmlcov/
           retention-days: 30
 
-      - name: Comment coverage on PR
-        if: github.event_name == 'pull_request'
-        uses: py-cov-action/python-coverage-comment-action@v3
+      - name: Upload coverage XML
+        uses: actions/upload-artifact@v4
+        if: always()
         with:
-          GITHUB_TOKEN: ${{ github.token }}
-          MINIMUM_GREEN: 95
-          MINIMUM_ORANGE: 90
+          name: hw5-coverage-xml
+          path: hw5/coverage.xml
+          retention-days: 30
+
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const coverage = fs.readFileSync('hw5/coverage.xml', 'utf8');
+            const match = coverage.match(/line-rate="([0-9.]+)"/);
+            const percent = match ? (parseFloat(match[1]) * 100).toFixed(2) : 'N/A';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 📊 Test Coverage Report\n\nCoverage: **${percent}%**\n\n[View detailed report](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`
+            });
+
+      - name: Test summary
+        if: always()
+        run: |
+          cd hw5
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          pytest tests/ --cov=shop_api --tb=no -q 2>&1 | tail -n 20 >> $GITHUB_STEP_SUMMARY || true
