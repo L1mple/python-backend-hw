@@ -1,11 +1,24 @@
+from .db import engine, Base, get_db  # <- импортируем БД-объекты
+from . import models
 from http import HTTPStatus
-from fastapi import FastAPI, HTTPException, Response, Query
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Response, Query, Depends
 from pydantic import BaseModel, Field, ConfigDict
 from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from prometheus_client import Counter, Histogram, Gauge
 import time
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+from .models import ItemModel, CartModel, CartItemModel
 
-app = FastAPI(title="Shop API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # старт приложения
+    Base.metadata.create_all(bind=engine)  # создаст таблицы, если их нет
+    yield
+    # остановка приложения (опционально: чистить ресурсы, пулы, фоновые задачи)
+
+app = FastAPI(title="Shop API", lifespan=lifespan)
 
 # Инициализация Prometheus инструментатора
 instrumentator = Instrumentator()
@@ -46,123 +59,86 @@ _items: dict[int, Item] = {}
 _next_item_id: int = 1
 
 @app.post("/item", response_model=Item, status_code=201)
-def create_item(payload: ItemIn, response: Response) -> Item:
-    start_time = time.time()
-    
-    global _next_item_id
-    item = Item(
-        id = _next_item_id,
-        name = payload.name,
-        price = payload.price,
-        deleted = False
-    )
-    _items[item.id] = item
-    _next_item_id += 1
-    
-    # Обновляем метрики
-    items_counter.labels(operation='created').inc()
-    active_items.set(len([i for i in _items.values() if not i.deleted]))
-    request_duration.labels(method='POST', endpoint='/item').observe(time.time() - start_time)
+def create_item(payload: ItemIn, response: Response, db: Session = Depends(get_db)) -> Item:
+    row = ItemModel(name=payload.name, price=payload.price, deleted=False)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    response.headers["Location"] = f"/item/{row.id}"
+    return Item(id=row.id, name=row.name, price=row.price, deleted=row.deleted)
 
-    response.headers["Location"] = f"/item/{item.id}"
-    return item
-
-@app.get("/item/{id}", response_model=Item)
-def get_item(id: int) -> Item:
-    item = _items.get(id)
-    if item is None or item.deleted:
+@app.get("/item/{item_id}", response_model=Item)
+def get_item(item_id: int, db: Session = Depends(get_db)) -> Item:
+    row = db.get(ItemModel, item_id)
+    if row is None or row.deleted:
         raise HTTPException(status_code=404, detail="Item not found")
-    return item
+    return Item(id=row.id, name=row.name, price=row.price, deleted=row.deleted)
 
 @app.post("/cart", response_model=CartCreated, status_code=201)
-def create_cart(response: Response) -> CartCreated:
-    """Создает пустую коризну и возврашает ее id"""
-    start_time = time.time()
-    
-    global _next_cart_id
-    cart_id = _next_cart_id
-    _carts[cart_id] = {}
-    _next_cart_id += 1
-    
-    # Обновляем метрики
-    carts_counter.labels(operation='created').inc()
-    active_carts.set(len(_carts))
-    request_duration.labels(method='POST', endpoint='/cart').observe(time.time() - start_time)
+def create_cart(response: Response, db: Session = Depends(get_db)) -> CartCreated:
+    row = CartModel()
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    response.headers["Location"] = f"/cart/{row.id}"
+    return CartCreated(id=row.id)
 
-    response.headers["Location"] = f"/cart/{cart_id}"
-    return CartCreated(id=cart_id)
-
-def _build_cart_out(cart_id: int) -> CartOut:
-    cart = _carts.get(cart_id)
-    items_out: list[CartItemOut] = []
-    total_price = 0.0
-
-    for item_id, quantity in cart.items():
-        item = _items.get(item_id)
-        if item is None or item.deleted:
-            continue
-        available = not item.deleted
-        items_out.append(CartItemOut(
-            id=item_id,
-            name=item.name, 
-            quantity=quantity, 
-            available=available
-        ))
-
-        total_price += item.price * quantity
-    return CartOut(
-        id=cart_id,
-        items=items_out,
-        price=total_price
-    )
-
-@app.get("/cart/{id}", response_model=CartOut)
-def get_cart(id: int) -> CartOut:
-    """
-    Возвращает корзину:
-    - items: список {id, name, quantity, available}
-    - price: сумма price * quantity для всех товаров (0.0 для пустой корзины)
-    """
-    cart = _carts.get(id)
+def _build_cart_out_db(db: Session, cart_id: int) -> CartOut:
+    # проверим, что корзина существует
+    cart = db.get(CartModel, cart_id)
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart not found")
+
+    # достанем позиции корзины с данными товаров
+    stmt = (
+        select(CartItemModel.item_id, CartItemModel.quantity,
+               ItemModel.name, ItemModel.price, ItemModel.deleted)
+        .join(ItemModel, ItemModel.id == CartItemModel.item_id)
+        .where(CartItemModel.cart_id == cart_id)
+    )
+    rows = db.execute(stmt).all()
+
     items_out: list[CartItemOut] = []
     total_price = 0.0
-    # cart — это dict[item_id -> quantity]
-    for item_id, quantity in cart.items():
-        item = _items.get(item_id)
-        if item is None or item.deleted:
-            continue
 
-        available = not item.deleted
+    for item_id, qty, name, price, deleted in rows:
         items_out.append(CartItemOut(
-            id=item_id,
-            name=item.name, 
-            quantity=quantity, 
-            available=available
+            id=int(item_id),
+            name=name,
+            quantity=int(qty),
+            available=not bool(deleted),
         ))
-        total_price += item.price * quantity
-    return CartOut(
-        id=id,
-        items=items_out,
-        price=total_price
-    )
+        total_price += float(price) * int(qty)  # считаем по текущей цене
+
+    return CartOut(id=cart_id, items=items_out, price=float(total_price))
+
+@app.get("/cart/{cart_id}", response_model=CartOut)
+def get_cart(cart_id: int, db: Session = Depends(get_db)) -> CartOut:
+    return _build_cart_out_db(db, cart_id)
 
 @app.post("/cart/{cart_id}/add/{item_id}", response_model=CartOut)
-def add_to_cart(cart_id: int, item_id: int) -> CartOut:
-    """
-    Добавляет товар в корзину:
-    - если товар уже есть, то увеличивается его количество
-    - если товар не найден, то возвращается ошибка 404
-    """
-    cart = _carts.get(cart_id)
+def add_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_db)) -> CartOut:
+    # 1) существование корзины и товара
+    cart = db.get(CartModel, cart_id)
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart not found")
-    item = _items.get(item_id)
-    if item is None or item.deleted:
+
+    item = db.get(ItemModel, item_id)
+    if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    cart[item_id] = int(cart.get(item_id, 0)) + 1
-    return _build_cart_out(cart_id)
+
+    # 2) upsert позиции корзины
+    row = db.get(CartItemModel, {"cart_id": cart_id, "item_id": item_id})
+    if row is None:
+        row = CartItemModel(cart_id=cart_id, item_id=item_id, quantity=1)
+        db.add(row)
+    else:
+        row.quantity = int(row.quantity) + 1
+        db.add(row)
+
+    db.commit()
+    # 3) вернуть актуальную корзину
+    return _build_cart_out_db(db, cart_id)
 
 @app.get("/item", response_model=list[Item])
 def list_items(
@@ -171,59 +147,52 @@ def list_items(
     limit: int = Query(50, gt=0),
     min_price: float | None = Query(None, ge=0),
     max_price: float | None = Query(None, ge=0),
+    db: Session = Depends(get_db),
 ) -> list[Item]:
-    """
-    Список товаров с фильтрами и пагинацией.
-    - По умолчанию скрываем удалённые.
-    - Фильтры по цене: min_price / max_price.
-    - Пагинация: offset / limit.
-    """
-    items = list(_items.values())
+    stmt = select(ItemModel)
+
+    # фильтры
     if not show_deleted:
-        items = [i for i in items if not i.deleted]
-    
+        stmt = stmt.where(ItemModel.deleted.is_(False))
     if min_price is not None:
-        items = [it for it in items if float(it.price) >= float(min_price)]
+        stmt = stmt.where(ItemModel.price >= float(min_price))
     if max_price is not None:
-        items = [it for it in items if float(it.price) <= float(max_price)]
-    #фиксируем порядок
-    items.sort(key=lambda x: x.id)
-    start = int(offset)
-    end = start + int(limit)
-    return items[start:end]
+        stmt = stmt.where(ItemModel.price <= float(max_price))
 
-@app.delete("/item/{id}", response_model=Item)
-def delete_item(id: int) -> Item:
-    """
-    Удаляет товар:
-    - товар помечается как удаленный
-    """
-    start_time = time.time()
-    
-    item = _items.get(id)
-    if item is None:
+    # порядок + пагинация
+    stmt = stmt.order_by(ItemModel.id).offset(int(offset)).limit(int(limit))
+
+    rows = db.execute(stmt).scalars().all()  # -> list[ItemModel]
+    return [Item(id=r.id, name=r.name, price=r.price, deleted=r.deleted) for r in rows]
+
+@app.delete("/item/{item_id}", response_model=Item)
+def delete_item(item_id: int, db: Session = Depends(get_db)) -> Item:
+    row = db.get(ItemModel, item_id)
+    if row is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    #идемптентность
-    if not item.deleted:
-        item.deleted = True
-        # Обновляем метрики только если товар действительно удалили
-        items_counter.labels(operation='deleted').inc()
-        active_items.set(len([i for i in _items.values() if not i.deleted]))
-    
-    request_duration.labels(method='DELETE', endpoint='/item').observe(time.time() - start_time)
-    return item
 
-@app.put("/item/{id}", response_model=Item)
-def put_item(id: int, payload: ItemIn) -> Item:
-    """
-    Заменяет товар по `id`
-    """
-    item = _items.get(id)
-    if item is None or item.deleted:
-        raise HTTPException(status_code = 404,detail="Item not found")
-    item.name = payload.name
-    item.price = payload.price
-    return item
+    # идемпотентность: повторный DELETE остаётся 200
+    if not row.deleted:
+        row.deleted = True
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+
+    return Item(id=row.id, name=row.name, price=row.price, deleted=row.deleted)
+
+@app.put("/item/{item_id}", response_model=Item)
+def replace_item(item_id: int, payload: ItemIn, db: Session = Depends(get_db)) -> Item:
+    row = db.get(ItemModel, item_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    row.name = payload.name
+    row.price = payload.price
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    return Item(id=row.id, name=row.name, price=row.price, deleted=row.deleted)
 
 class ItemPatch(BaseModel):
     # Оба поля опциональные — это «частичное» обновление
@@ -232,51 +201,59 @@ class ItemPatch(BaseModel):
     # Запрещаем лишние поля в payload → иначе 422
     model_config = ConfigDict(extra="forbid")
 
-@app.patch("/item/{item_id}",response_model=Item)
-def patch_item(item_id:int,payload:ItemPatch):
-    item = _items.get(item_id)
-    if item is None:
+@app.patch("/item/{item_id}", response_model=Item)
+def patch_item(item_id: int, payload: ItemPatch, db: Session = Depends(get_db)):
+    row = db.get(ItemModel, item_id)
+    if row is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    
-    # Нельзя патчить удалённый товар — 304 Not Modified
-    if item.deleted:
-        return Response(status_code=HTTPStatus.NOT_MODIFIED)
-    
-    # Пустой патч {} допустим: просто ничего не меняем и возвращаем 200
-    if payload.name is not None:
-        item.name = payload.name
-    if payload.price is not None:
-        item.price = payload.price
 
-    return item
+    # Нельзя патчить удалённый товар
+    if row.deleted:
+        return Response(status_code=HTTPStatus.NOT_MODIFIED)
+
+    changed = False
+    if payload.name is not None:
+        row.name = payload.name
+        changed = True
+    if payload.price is not None:
+        row.price = payload.price
+        changed = True
+
+    if changed:
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+
+    return Item(id=row.id, name=row.name, price=row.price, deleted=row.deleted)
 
 @app.get("/cart", response_model=list[CartOut])
 def list_carts(
+    db: Session = Depends(get_db),
     offset: int = Query(0, ge=0),
-    limit: int = Query(50, gt=0),
+    limit: int  = Query(50, gt=0),
     min_price: float | None = Query(None, ge=0),
     max_price: float | None = Query(None, ge=0),
     min_quantity: int | None = Query(None, ge=0),
     max_quantity: int | None = Query(None, ge=0),
 ) -> list[CartOut]:
-    # получаем все корзины в едином формате
-    cart_ids = sorted(_carts.keys())
-    carts: list[CartOut] = [_build_cart_out(cid) for cid in cart_ids]
+    # берём все id корзин (отсортированные, для стабильности)
+    ids = [row[0] for row in db.execute(select(CartModel.id)).all()]
+    carts = [_build_cart_out_db(db, cid) for cid in ids]
 
-    # фильтры по цене корзины
+    # фильтры по цене
     if min_price is not None:
         carts = [c for c in carts if c.price >= float(min_price)]
     if max_price is not None:
         carts = [c for c in carts if c.price <= float(max_price)]
 
-    # фильтры по суммарному количеству товаров в корзине
-    def cart_qty(c: CartOut) -> int:
+    # фильтры по суммарному количеству
+    def total_qty(c: CartOut) -> int:
         return sum(i.quantity for i in c.items)
 
     if min_quantity is not None:
-        carts = [c for c in carts if cart_qty(c) >= int(min_quantity)]
+        carts = [c for c in carts if total_qty(c) >= int(min_quantity)]
     if max_quantity is not None:
-        carts = [c for c in carts if cart_qty(c) <= int(max_quantity)]
+        carts = [c for c in carts if total_qty(c) <= int(max_quantity)]
 
     # пагинация
     start = int(offset)

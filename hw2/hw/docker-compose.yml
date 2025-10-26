@@ -1,6 +1,18 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+    ports:
+      - "5432:5432"        # можно убрать публикацию наружу, если не нужна
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
   shop-api:
     build:
       context: .
@@ -11,10 +23,13 @@ services:
       - "8080:8080"
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/tmp
+      - DATABASE_URL=postgresql+psycopg://shop:shop@postgres:5432/shop   # ← добавили
     volumes:
       - /tmp:/tmp
+      - ./scripts:/app/scripts:ro
     depends_on:
       - prometheus
+      - postgres   # ← добавили зависимость от БД
 
   prometheus:
     image: prom/prometheus:latest
@@ -47,5 +62,6 @@ services:
       - prometheus
 
 volumes:
+  pgdata:
   prometheus_data:
   grafana_data:
