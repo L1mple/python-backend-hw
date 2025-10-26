@@ -60,10 +60,16 @@ class Store:
         updated_item = (await self.session.execute(stmt)).scalar_one()
         return schemas.Item.model_validate(updated_item, from_attributes=True)
     
-    async def get_items(self, item_id: int | None = None) -> dict[int, schemas.Item]:
+    async def get_items(
+            self,
+            item_id: int | None = None,
+            item_ids: list[int] | None = None,
+        ) -> dict[int, schemas.Item]:
         stmt = select(tables.Item)
         if item_id:
             stmt = stmt.where(tables.Item.id == item_id)
+        if item_ids:
+            stmt = stmt.where(tables.Item.id.in_(item_ids))
         items = (await self.session.execute(stmt)).scalars().all()
         return {
             item.id: schemas.Item.model_validate(item, from_attributes=True)
@@ -121,7 +127,7 @@ async def get_cart(cart_id: int, store: Store) -> schemas.CartResponse:
     carts = await store.get_carts(cart_id=cart_id)
     if not carts:
         raise HTTPException(status_code=http.HTTPStatus.NOT_FOUND)
-    items = await store.get_items()
+    items = await store.get_items(item_ids=list(carts[cart_id].items.keys()))
     return carts[cart_id].create_cart_response(items)[0]
 
 
@@ -182,7 +188,7 @@ async def create_item(
 @app.get("/item/{item_id}")
 async def get_item(item_id: int, store: Store) -> schemas.Item:
     items = await store.get_items(item_id=item_id)
-    if not items:
+    if not items or items[item_id].deleted:
         raise HTTPException(status_code=http.HTTPStatus.NOT_FOUND)
     return items[item_id]
 

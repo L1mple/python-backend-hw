@@ -2,13 +2,11 @@ from http import HTTPStatus
 from typing import Any
 from uuid import uuid4
 
+import httpx
 import pytest
 from faker import Faker
-from fastapi.testclient import TestClient
 
-from shop_api.main import app
-
-client = TestClient(app)
+client = httpx.Client(base_url="http://localhost:8080/")
 faker = Faker()
 
 
