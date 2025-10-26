@@ -3,7 +3,6 @@ import string
 import time
 from typing import Dict, List, Optional
 
-from database import engine, get_db
 from fastapi import (
     Depends,
     FastAPI,
@@ -14,13 +13,15 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
-from models import Base
-from models import Cart as DBCart
-from models import CartItem as DBCartItem
-from models import Item as DBItem
 from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
+
+from .database import engine, get_db
+from .models import Base
+from .models import Cart as DBCart
+from .models import CartItem as DBCartItem
+from .models import Item as DBItem
 
 # Создание таблиц в базе данных
 Base.metadata.create_all(bind=engine)
@@ -247,6 +248,8 @@ async def get_carts(
     filtered_carts = []
     for db_cart in carts:
         items = []
+        total_quantity = 0
+
         for cart_item in db_cart.cart_items:
             items.append(
                 CartItem(
@@ -256,28 +259,22 @@ async def get_carts(
                     available=not cart_item.item.deleted,
                 )
             )
+            total_quantity += cart_item.quantity
 
-        cart_model = Cart(
-            id=db_cart.id, items=items, price=calculate_cart_price(db, db_cart)
-        )
+        cart_price = calculate_cart_price(db, db_cart)
 
-        # Фильтр по цене
-        if min_price is not None and cart_model.price < min_price:
+        # Фильтруем каждую корзину отдельно
+        if min_price is not None and cart_price < min_price:
             continue
-        if max_price is not None and cart_model.price > max_price:
+        if max_price is not None and cart_price > max_price:
             continue
-
-        filtered_carts.append(cart_model)
-
-    if min_quantity is not None or max_quantity is not None:
-        total_quantity = sum(
-            item.quantity for cart in filtered_carts for item in cart.items
-        )
-
         if min_quantity is not None and total_quantity < min_quantity:
-            return []
+            continue
         if max_quantity is not None and total_quantity > max_quantity:
-            return []
+            continue
+
+        cart_model = Cart(id=db_cart.id, items=items, price=cart_price)
+        filtered_carts.append(cart_model)
 
     return filtered_carts
 
@@ -446,6 +443,10 @@ async def partial_update_item(
 async def delete_item(item_id: int, db: Session = Depends(get_db)):
     db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
     if not db_item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    # Проверяем, был ли товар уже удален
+    if db_item.deleted:
         raise HTTPException(status_code=404, detail="Item not found")
 
     db_item.deleted = True
