@@ -1,13 +1,12 @@
 name: "HW5 Tests"
 
-# Запускаем тесты при изменении файлов в hw2/hw/
+# Запускаем тесты при изменении файлов в hw2/
 on:
   pull_request:
     branches: [ main ]
     paths: [ 'hw2/hw/**' ]
   push:
     branches: [ hw5 ]
-    paths: [ 'hw2/hw/**' ]
 
 jobs:
   test-hw2:
