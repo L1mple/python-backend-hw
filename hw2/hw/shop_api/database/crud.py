@@ -166,6 +166,15 @@ def update_order(db: Session, order_id: int, order_update: OrderCreate) -> Optio
     return db_order
 
 
+def update_order_status(db: Session, order_id: int, status: str) -> Optional[Order]:
+    db_order = db.query(Order).filter(Order.id == order_id).first()
+    if db_order:
+        db_order.status = status
+        db.commit()
+        db.refresh(db_order)
+    return db_order
+
+
 def delete_order(db: Session, order_id: int) -> bool:
     db_order = db.query(Order).filter(Order.id == order_id).first()
     if db_order:

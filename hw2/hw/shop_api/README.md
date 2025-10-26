@@ -82,6 +82,14 @@ alembic revision --autogenerate -m "description"
 alembic upgrade head
 ```
 
+## Тестирование
+
+```bash
+make test
+
+make coverage
+```
+
 ## Уровни изоляции транзакций
 
 ```bash

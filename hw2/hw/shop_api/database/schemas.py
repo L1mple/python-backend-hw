@@ -1,12 +1,12 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from typing import Optional
 
 
 class UserBase(BaseModel):
-    email: str
+    email: EmailStr
     name: str
-    age: int
+    age: int = Field(ge=0, description="Age must be non-negative")
 
 
 class UserCreate(UserBase):
@@ -22,7 +22,7 @@ class UserResponse(UserBase):
 
 class ProductBase(BaseModel):
     name: str
-    price: float
+    price: float = Field(ge=0, description="Price must be non-negative")
     description: Optional[str] = None
     in_stock: bool = True
 
@@ -41,7 +41,7 @@ class ProductResponse(ProductBase):
 class OrderBase(BaseModel):
     user_id: int
     product_id: int
-    quantity: int
+    quantity: int = Field(ge=1, description="Quantity must be at least 1")
     status: str = 'pending'
 
 
