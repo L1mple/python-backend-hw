@@ -5,7 +5,6 @@ def test_create_item_success(client):
     response = client.post("/item/", json={"name": "Test Item", "price": 10.5})
     assert response.status_code == HTTPStatus.CREATED
     data = response.json()
-
     assert data["name"] == "Test Item"
     assert data["price"] == 10.5
     assert "id" in data
