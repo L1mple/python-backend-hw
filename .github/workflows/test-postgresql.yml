@@ -35,18 +35,16 @@ jobs:
 
       - name: Install uv
         run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          pip intall uv
 
       - name: Install dependencies
         run: |
           cd hw2/hw
           uv sync
 
-      # Run all tests with PostgreSQL
       - name: Run all tests with PostgreSQL
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shop_test
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/shop_test
         run: |
           cd hw2/hw
           uv run -m pytest -v
