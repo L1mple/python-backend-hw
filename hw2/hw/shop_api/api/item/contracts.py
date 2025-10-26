@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
+from decimal import Decimal
 
 from .store.models import ItemEntity, ItemInfo, PatchItemInfo
 
 class ItemResponse(BaseModel):
     id: int
     name: str
-    price: float
+    price: Decimal
     deleted: bool
 
     @staticmethod
@@ -22,7 +23,7 @@ class ItemResponse(BaseModel):
 
 class ItemRequest(BaseModel):
     name: str
-    price: float
+    price: Decimal
 
     def as_item_info(self) -> ItemInfo:
         return ItemInfo(name=self.name, price=self.price)
@@ -30,7 +31,7 @@ class ItemRequest(BaseModel):
 
 class PatchItemRequest(BaseModel):
     name: str | None = None
-    price: float | None = None
+    price: Decimal | None = None
 
     model_config = ConfigDict(extra="forbid")
 

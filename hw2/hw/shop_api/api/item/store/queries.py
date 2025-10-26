@@ -1,68 +1,108 @@
+from sqlalchemy.orm import Session
 from typing import Iterable
-from itertools import count
-
-from .models import (
-    ItemEntity,
-    ItemInfo,
-    PatchItemInfo,
+from decimal import Decimal
+from shop_api.database import get_db
+from shop_api.database.models import Product
+from shop_api.database.crud import (
+    get_product, get_products, create_product, update_product, delete_product
 )
-
-_data: dict[int, ItemInfo] = {}
-
-_id_generator = count()
+from .models import ItemEntity, ItemInfo, PatchItemInfo
 
 
 def add(info: ItemInfo) -> ItemEntity:
-    _id = next(_id_generator)
-    _data[_id] = info
+    from shop_api.database.schemas import ProductCreate
 
-    return ItemEntity(_id, info)
+    product_create = ProductCreate(
+        name=info.name,
+        price=float(info.price),
+        in_stock=not info.deleted
+    )
+
+    with next(get_db()) as db:
+        db_product = create_product(db, product_create)
+        return ItemEntity.from_product(db_product)
 
 
 def delete(id: int) -> None:
-    _data.pop(id, None)
+    with next(get_db()) as db:
+        product = get_product(db, id)
+        if product:
+            product.in_stock = False
+            db.commit()
 
 
 def get_one(id: int) -> ItemEntity | None:
-    info = _data.get(id)
-    return ItemEntity(id=id, info=info) if info else None
+    with next(get_db()) as db:
+        product = get_product(db, id)
+        return ItemEntity.from_product(product) if product else None
 
 
-def get_list(offset: int = 0, limit: int = 10, min_price: float | None = None, max_price: float | None = None, show_deleted: bool = False) -> Iterable[ItemEntity]:
-    def matches_filters(info: ItemInfo) -> bool:
-        if min_price is not None and info.price < min_price:
-            return False
-        if max_price is not None and info.price > max_price:
-            return False
-        if not show_deleted and info.deleted:
-            return False
-        return True
-    
-    filtered_items = [ItemEntity(id, info) for id, info in _data.items() if matches_filters(info)]
-    return filtered_items[offset:offset+limit]
-    
+def get_list(
+    offset: int = 0,
+    limit: int = 10,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    show_deleted: bool = False
+) -> Iterable[ItemEntity]:
+    with next(get_db()) as db:
+        min_price_decimal = Decimal(str(min_price)) if min_price is not None else None
+        max_price_decimal = Decimal(str(max_price)) if max_price is not None else None
+
+        products = get_products(
+            db=db,
+            skip=offset,
+            limit=limit,
+            min_price=min_price_decimal,
+            max_price=max_price_decimal,
+            in_stock=None if show_deleted else True
+        )
+
+        return [ItemEntity.from_product(product) for product in products]
 
 
 def update(id: int, info: ItemInfo) -> ItemEntity | None:
-    if id not in _data:
-        return None
-    _data[id] = info
-    return ItemEntity(id=id, info=info)
+    from shop_api.database.schemas import ProductCreate
+
+    product_update = ProductCreate(
+        name=info.name,
+        price=float(info.price),
+        in_stock=not info.deleted
+    )
+
+    with next(get_db()) as db:
+        updated_product = update_product(db, id, product_update)
+        return ItemEntity.from_product(updated_product) if updated_product else None
 
 
 def upsert(id: int, info: ItemInfo) -> ItemEntity:
-    _data[id] = info
-    return ItemEntity(id=id, info=info)
+    from shop_api.database.schemas import ProductCreate
+
+    product_update = ProductCreate(
+        name=info.name,
+        price=float(info.price),
+        in_stock=not info.deleted
+    )
+
+    with next(get_db()) as db:
+        updated_product = update_product(db, id, product_update)
+        if updated_product:
+            return ItemEntity.from_product(updated_product)
+
+        db_product = create_product(db, product_update)
+        return ItemEntity.from_product(db_product)
 
 
 def patch(id: int, patch_info: PatchItemInfo) -> ItemEntity | None:
-    if id not in _data:
-        return None
+    with next(get_db()) as db:
+        product = get_product(db, id)
+        if not product:
+            return None
 
-    if patch_info.name is not None:
-        _data[id].name = patch_info.name
+        if patch_info.name is not None:
+            product.name = patch_info.name
+        if patch_info.price is not None:
+            product.price = patch_info.price
 
-    if patch_info.price is not None:
-        _data[id].price = patch_info.price
-
-    return ItemEntity(id=id, info=_data[id])
+        db.commit()
+        db.refresh(product)
+        return ItemEntity.from_product(product)

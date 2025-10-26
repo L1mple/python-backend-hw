@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS base
+FROM python:3.12-slim
 
 ENV APP_ROOT=/app
 
@@ -17,10 +17,11 @@ RUN apt-get update && \
 RUN python -m pip install --upgrade pip
 
 WORKDIR ${APP_ROOT}/src
-COPY requirements.txt ./
+
+COPY ../requirements.txt ./
 RUN pip install -r requirements.txt
 
-COPY . ./
+COPY . .
 
 ENV VIRTUAL_ENV=${APP_ROOT}/src/.venv \
     PATH=${APP_ROOT}/src/.venv/bin:$PATH
@@ -28,7 +29,5 @@ ENV VIRTUAL_ENV=${APP_ROOT}/src/.venv \
 RUN useradd -m -u 1000 appuser && \
     chown -R appuser:appuser ${APP_ROOT}/src
 USER appuser
-
-FROM base as local
 
 CMD ["uvicorn", "shop_api.main:app", "--port", "8080", "--host", "0.0.0.0"]
