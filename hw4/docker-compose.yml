@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: shop_db
+    environment:
+      - POSTGRES_USER=shop_user
+      - POSTGRES_PASSWORD=shop_password
+      - POSTGRES_DB=shop_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  api:
+    build: .
+    container_name: shop_api
+    command: uvicorn shop_api.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://shop_user:shop_password@db/shop_db
+      - PYTHONPATH=/app
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
