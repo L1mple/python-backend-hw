@@ -10,7 +10,7 @@ on:
     paths: [ 'hw2/hw/**' ]
 
 jobs:
-  test:
+  test-hw5:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -33,7 +33,7 @@ jobs:
 
     steps:
     - name: Checkout code
-    - uses: actions/checkout@v4
+      uses: actions/checkout@v4
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
@@ -41,9 +41,10 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
+      working-directory: hw2/hw
       run: |
         python -m pip install --upgrade pip
-        pip install -r hw2/hw/requirements.txt
+        pip install -r requirements.txt
 
     - name: Run tests with coverage
       working-directory: hw2/hw
