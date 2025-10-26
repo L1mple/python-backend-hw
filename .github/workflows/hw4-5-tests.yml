@@ -1,0 +1,59 @@
+name: Run tests HW4 and HW5
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: hw2_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U user -d hw2_db"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://user:password@localhost:5432/hw2_db
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r hw2/hw/requirements.txt
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U user; do
+            echo "Waiting for Postgres..."
+            sleep 2
+          done
+
+      - name: Run tests with coverage
+        working-directory: hw2/hw
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: postgresql+psycopg2://user:password@localhost:5432/hw2_db
+        run: |
+          echo "PYTHONPATH=$PYTHONPATH"
+          pytest --cov=shop_api --cov-report=term-missing --cov-fail-under=95
