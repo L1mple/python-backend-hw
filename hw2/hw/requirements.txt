@@ -3,6 +3,10 @@ fastapi>=0.117.1
 uvicorn>=0.24.0
 prometheus-fastapi-instrumentator
 
+# Тесты
+pytest>=8.2.0
+pytest-cov>=4.1.0
+
 # БД
 SQLAlchemy>=2.0.30
 psycopg2-binary>=2.9.9
