@@ -16,17 +16,15 @@ from .models import ItemModel, CartModel, CartItemModel
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: инициализация БД
     await init_db()
     yield
-    # Shutdown: здесь можно добавить логику закрытия соединений
 
 
 app = FastAPI(title="Shop API", lifespan=lifespan)
 
 Instrumentator().instrument(app).expose(app)
 
-# ----------------- MODELS -----------------
+
 class Item(BaseModel):
     id: int
     name: str = Field(..., min_length=1)
@@ -54,7 +52,6 @@ class Cart(BaseModel):
     price: float = 0.0
 
 
-# ----------------- ITEMS -----------------
 @app.post("/item", response_model=Item, status_code=status.HTTP_201_CREATED)
 async def create_item(item: ItemCreate, session: AsyncSession = Depends(get_session)):
     new_item = ItemModel(name=item.name, price=item.price, deleted=False)
@@ -120,7 +117,10 @@ async def patch_item(item_id: int, upd: ItemUpdate, session: AsyncSession = Depe
     result = await session.execute(select(ItemModel).where(ItemModel.id == item_id))
     item = result.scalar_one_or_none()
     
-    if item is None or item.deleted:
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    if item.deleted:
         raise HTTPException(status_code=304, detail="Item not modified")
     
     update_data = upd.model_dump(exclude_unset=True)
@@ -144,7 +144,7 @@ async def delete_item(item_id: int, session: AsyncSession = Depends(get_session)
     
     return Response(status_code=status.HTTP_200_OK)
 
-# ----------------- CARTS -----------------
+
 @app.post("/cart", response_model=Cart, status_code=status.HTTP_201_CREATED)
 async def create_cart(response: Response, session: AsyncSession = Depends(get_session)):
     new_cart = CartModel()
@@ -276,19 +276,15 @@ async def add_to_cart(cart_id: int, item_id: int, session: AsyncSession = Depend
     cart_item = cart_item_result.scalar_one_or_none()
     
     if cart_item:
-        # Увеличиваем количество
         cart_item.quantity += 1
     else:
-        # Добавляем новый товар в корзину
         new_cart_item = CartItemModel(cart_id=cart_id, item_id=item_id, quantity=1)
         session.add(new_cart_item)
     
     await session.commit()
-    
-    # Возвращаем обновленную корзину
     return await get_cart(cart_id, session)
 
-# ----------------- WEBSOCKET CHAT -----------------
+
 rooms: Dict[str, Dict[WebSocket, str]] = defaultdict(dict)
 
 @app.websocket("/chat/{chat_name}")
