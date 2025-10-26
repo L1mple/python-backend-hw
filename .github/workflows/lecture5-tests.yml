@@ -1,0 +1,47 @@
+name: "Lecture5 Tests"
+
+# Запускаем тесты при изменении файлов в lecture5/
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ 'lecture5/**' ]
+  push:
+    branches: [ main ]
+    paths: [ 'lecture5/**' ]
+
+jobs:
+  test-lecture5:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      working-directory: lecture5
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests with coverage
+      working-directory: .
+      env:
+        PYTHONPATH: ${{ github.workspace }}
+      run: |
+        pytest lecture5/tests/ --cov=lecture5 --cov-config=lecture5/.coveragerc --cov-report=term-missing --cov-report=xml --cov-fail-under=95 -v
+
+    - name: Upload coverage report
+      uses: codecov/codecov-action@v3
+      if: matrix.python-version == '3.12'
+      with:
+        file: ./coverage.xml
+        flags: lecture5
+        name: lecture5-coverage
