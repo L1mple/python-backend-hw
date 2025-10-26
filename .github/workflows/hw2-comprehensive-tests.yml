@@ -3,10 +3,14 @@ name: HW2 Comprehensive Tests
 on:
   push:
     branches: [ main, dev ]
-    paths: [ 'hw2/hw/**' ]
+    paths:
+      - 'hw2/hw/**'
+      - '.github/workflows/hw2-comprehensive-tests.yml'
   pull_request:
     branches: [ main ]
-    paths: [ 'hw2/hw/**' ]
+    paths:
+      - 'hw2/hw/**'
+      - '.github/workflows/hw2-comprehensive-tests.yml'
 
 jobs:
   test:
