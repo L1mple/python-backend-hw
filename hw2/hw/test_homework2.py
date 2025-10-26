@@ -282,3 +282,172 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+
+def test_add_to_cart_new_item(
+    existing_empty_cart_id: int,
+    existing_items: list[int],
+) -> None:
+    cart_id = existing_empty_cart_id
+    item_id = existing_items[0]
+
+    response = client.post(f"/cart/{cart_id}/add/{item_id}")
+    
+    assert response.status_code == HTTPStatus.OK
+    cart_data = response.json()
+    assert cart_data["id"] == cart_id
+    assert len(cart_data["items"]) == 1
+    assert cart_data["items"][0]["id"] == item_id
+    assert cart_data["items"][0]["quantity"] == 1
+
+
+def test_add_to_cart_existing_item(
+    existing_empty_cart_id: int,
+    existing_items: list[int],
+) -> None:
+    cart_id = existing_empty_cart_id
+    item_id = existing_items[0]
+
+    client.post(f"/cart/{cart_id}/add/{item_id}")
+    response = client.post(f"/cart/{cart_id}/add/{item_id}")
+    
+    assert response.status_code == HTTPStatus.OK
+    cart_data = response.json()
+    assert len(cart_data["items"]) == 1
+    assert cart_data["items"][0]["quantity"] == 2
+
+
+def test_add_to_cart_not_found_cart() -> None:
+    response = client.post("/cart/99999/add/1")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_to_cart_not_found_item(existing_empty_cart_id: int) -> None:
+    response = client.post(f"/cart/{existing_empty_cart_id}/add/99999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_item_not_found() -> None:
+    response = client.get("/item/99999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_put_item_not_found() -> None:
+    response = client.put("/item/99999", json={"name": "test", "price": 10.0})
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_patch_item_not_found() -> None:
+    response = client.patch("/item/99999", json={"price": 10.0})
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_cart_not_found() -> None:
+    response = client.get("/cart/99999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_list_carts_with_filters(
+    existing_not_empty_carts: list[int],
+) -> None:
+    response = client.get("/cart", params={"min_quantity": 5})
+    assert response.status_code == HTTPStatus.OK
+    carts = response.json()
+    for cart in carts:
+        total_quantity = sum(item["quantity"] for item in cart["items"])
+        assert total_quantity >= 5
+
+    response = client.get("/cart", params={"max_quantity": 3})
+    assert response.status_code == HTTPStatus.OK
+    carts = response.json()
+    for cart in carts:
+        total_quantity = sum(item["quantity"] for item in cart["items"])
+        assert total_quantity <= 3
+
+
+def test_list_items_with_deleted(existing_item: dict[str, Any]) -> None:
+    item_id = existing_item["id"]
+    
+    client.delete(f"/item/{item_id}")
+    
+    response = client.get("/item", params={"limit": 100})
+    assert response.status_code == HTTPStatus.OK
+    items = response.json()
+    item_ids = [item["id"] for item in items]
+    assert item_id not in item_ids
+    
+    response = client.get("/item", params={"show_deleted": True, "limit": 100})
+    assert response.status_code == HTTPStatus.OK
+    items = response.json()
+    item_ids = [item["id"] for item in items]
+    assert item_id in item_ids
+
+
+def test_cart_price_calculation(
+    existing_empty_cart_id: int,
+    existing_items: list[int],
+) -> None:
+    cart_id = existing_empty_cart_id
+    
+    for item_id in existing_items[:3]:
+        client.post(f"/cart/{cart_id}/add/{item_id}")
+    
+    response = client.get(f"/cart/{cart_id}")
+    assert response.status_code == HTTPStatus.OK
+    cart = response.json()
+    
+    calculated_price = 0.0
+    for item in cart["items"]:
+        item_response = client.get(f"/item/{item['id']}")
+        item_data = item_response.json()
+        calculated_price += item_data["price"] * item["quantity"]
+    
+    assert cart["price"] == pytest.approx(calculated_price, 1e-8)
+
+
+def test_create_item_validation() -> None:
+    response = client.post("/item", json={"name": "test", "price": -10.0})
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    
+    response = client.post("/item", json={"name": "test", "price": 0.0})
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    
+    response = client.post("/item", json={"name": "", "price": 10.0})
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+def test_list_items_offset_limit() -> None:
+    response1 = client.get("/item", params={"offset": 0, "limit": 5})
+    response2 = client.get("/item", params={"offset": 5, "limit": 5})
+    
+    assert response1.status_code == HTTPStatus.OK
+    assert response2.status_code == HTTPStatus.OK
+    
+    items1 = response1.json()
+    items2 = response2.json()
+    
+    ids1 = [item["id"] for item in items1]
+    ids2 = [item["id"] for item in items2]
+    
+    assert len(set(ids1) & set(ids2)) == 0
+
+
+def test_websocket_chat() -> None:
+    with client.websocket_connect("/chat/test-room") as websocket1:
+        with client.websocket_connect("/chat/test-room") as websocket2:
+            websocket1.send_text("Hello from client 1")
+            
+            data = websocket2.receive_text()
+            assert "Hello from client 1" in data
+            
+            websocket2.send_text("Hello from client 2")
+            
+            data = websocket1.receive_text()
+            assert "Hello from client 2" in data
+
+
+def test_websocket_multiple_rooms() -> None:
+    with client.websocket_connect("/chat/room1") as ws_room1:
+        with client.websocket_connect("/chat/room2") as ws_room2:
+            ws_room1.send_text("Message for room1")
+            ws_room2.send_text("Message for room2")
