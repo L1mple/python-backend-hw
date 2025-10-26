@@ -1,0 +1,25 @@
+version: "3"
+
+volumes:
+  postgres-data:
+
+networks:
+  net:
+
+services:
+  postgres:
+    container_name: postgres_hw
+    environment:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    image: postgres:15
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: on-failure
+    ports:
+      - "5432:5432"
+    networks:
+      - net
