@@ -1,27 +1,28 @@
-from __future__ import annotations
-from dataclasses import dataclass, field
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey
+from sqlalchemy.orm import relationship
+from shop_api.core.database import Base
 
-@dataclass
-class Item:
-    id: int
-    name: str
-    price: float
-    deleted: bool = False
+class ItemDB(Base):
+    __tablename__ = "items"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    price = Column(Float, nullable=False)
+    deleted = Column(Boolean, default=False)
 
-@dataclass
-class CartItem:
-    id: int
-    quantity: int = 1
+    cart_items = relationship("CartItemDB", back_populates="item")
 
-@dataclass
-class Cart:
-    id: int
-    items: list[CartItem] = field(default_factory=list)
+class CartDB(Base):
+    __tablename__ = "carts"
+    id = Column(Integer, primary_key=True)
 
-    def total_price(self, items_store: dict[int, Item]) -> float:
-        total = 0.0
-        for cart_item in self.items:
-            item = items_store.get(cart_item.id)
-            if item is not None and not item.deleted:
-                total += item.price * cart_item.quantity
-        return float(total)
+    items = relationship("CartItemDB", back_populates="cart", cascade="all, delete")
+
+class CartItemDB(Base):
+    __tablename__ = "cart_items"
+    id = Column(Integer, primary_key=True)
+    cart_id = Column(Integer, ForeignKey("carts.id", ondelete="CASCADE"))
+    item_id = Column(Integer, ForeignKey("items.id", ondelete="CASCADE"))
+    quantity = Column(Integer, nullable=False, default=1)
+
+    cart = relationship("CartDB", back_populates="items")
+    item = relationship("ItemDB", back_populates="cart_items")

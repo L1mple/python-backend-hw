@@ -1,7 +1,6 @@
-version: "3"
+version: "3.9"
 
 services:
-
   local:
     build:
       context: .
@@ -10,6 +9,24 @@ services:
     restart: always
     ports:
       - 8080:8080
+    environment:
+      DATABASE_URL: postgresql+psycopg2://user:password@db:5432/hw2_db
+      PYTHONPATH: /src
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16
+    container_name: hw2_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: hw2_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
 
   grafana:
     image: grafana/grafana:latest
