@@ -50,4 +50,4 @@ jobs:
       env:
         PYTHONPATH: ${{ github.workspace }}/hw5
       run: |
-        pytest -vv --cov=hw5/ ./tests
+        pytest -vv --cov=shop_api ./tests
