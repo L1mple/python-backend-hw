@@ -1,0 +1,8 @@
+[run]
+omit =
+    hw2/hw/shop_api/grpc_server.py
+    hw2/hw/shop_api/shop_pb2.py
+    hw2/hw/shop_api/shop_pb2_grpc.py
+    hw2/hw/shop_api/main.py
+
+

@@ -1,0 +1,51 @@
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r hw2/hw/requirements.txt -r lecture5/requirements.txt
+
+      - name: Run tests with coverage (HW2)
+        env:
+          PYTHONPATH: hw2/hw
+        run: |
+          pytest -vv --maxfail=1 \
+            --cov=shop_api \
+            --cov-report=term-missing \
+            --cov-fail-under=95 \
+            hw2/hw/test_homework2.py
+
+      - name: Upload coverage (artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: ./.coverage*
+
+
