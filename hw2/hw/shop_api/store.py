@@ -95,29 +95,28 @@ class DatabaseStore:
             if not cart:
                 return None
             
-            cart_items = []
-            total_price = 0
+            cart_items_result = session.execute(
+                select(CartItemAssociation).where(CartItemAssociation.cart_id == id)
+            ).scalars().all()
             
-            for association in cart.cart_item_associations:
-                item = association.item
-                if not item.deleted:
-                    cart_item_entity = CartItemEntity(
-                        id=item.id,
-                        info=CartItemInfo(
-                            name=item.name,
-                            quantity=association.quantity,
-                            available=not item.deleted
-                        )
+            cart_items = []
+            for cart_item_db in cart_items_result:
+                cart_item_entity = CartItemEntity(
+                    id=cart_item_db.item_id,
+                    info=CartItemInfo(
+                        name=cart_item_db.item_name,
+                        quantity=cart_item_db.quantity,
+                        available=cart_item_db.available
                     )
-                    cart_items.append(cart_item_entity)
-                    total_price += item.price * association.quantity
+                )
+                cart_items.append(cart_item_entity)
             
             cart_info = CartInfo(
                 items=cart_items,
-                price=total_price
+                price=float(cart.total_price)
             )
             
-            return CartEntity(id=cart.id, info=cart_info)
+            return CartEntity(id=int(cart.id), info=cart_info)
 
     def get_all_carts(self) -> List[CartEntity]:
         with self.get_session() as session:
