@@ -1,6 +1,6 @@
-# from __future__ import annotations
-from typing import Optional, Annotated
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Annotated, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 ItemName = Annotated[str, Field(description="Наименование товара", min_length=1)]
 ItemId = Annotated[int, Field(description="Идентификатор корзины", ge=0)]
@@ -9,7 +9,6 @@ ItemPrice = Annotated[float, Field(description="Цена товара", ge=0)]
 CartId = Annotated[int, Field(description="Идентификатор корзины")]
 
 
-# ---- Item ----
 class ItemOut(BaseModel):
     id: ItemId
     name: ItemName
@@ -28,14 +27,12 @@ class ItemPut(BaseModel):
 
 
 class ItemPatch(BaseModel):
-    # Разрешаем частичное обновление ТОЛЬКО name/price; лишние поля → 422
     model_config = ConfigDict(extra="forbid")
 
     name: Optional[ItemName] = None
     price: Optional[ItemPrice] = None
 
 
-# ---- Cart ----
 class CartItemView(BaseModel):
     id: ItemId
     name: ItemName

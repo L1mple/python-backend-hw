@@ -24,11 +24,26 @@ services:
       dockerfile: ./Dockerfile
       target: local
     restart: always
+    environment:
+      - DATABASE_URL=postgresql://shop:shop@postgres:5432/shopdb
     ports:
       - 8080:8080
     depends_on:
       - prometheus
       - grafana
+      - postgres
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+      POSTGRES_DB: shopdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    restart: always
 
 volumes:
   postgres_data:
