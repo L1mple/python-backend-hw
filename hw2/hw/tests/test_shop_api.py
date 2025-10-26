@@ -55,6 +55,7 @@ class TestCartEndpoints:
         assert "id" in data
         assert isinstance(data["id"], int)
 
+
     @pytest.mark.parametrize("cart_fixture, expected_items_count", [
         ("empty_cart", 0),
         ("cart_with_items", 3),
