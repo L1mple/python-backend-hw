@@ -40,7 +40,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd hw
+          cd hw2/hw
           uv sync
 
       # Run all tests with PostgreSQL
@@ -48,5 +48,5 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/shop_test
         run: |
-          cd hw
+          cd hw2/hw
           uv run -m pytest -v
