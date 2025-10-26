@@ -5,8 +5,8 @@ from pydantic import NonNegativeInt, PositiveInt
 
 from sqlalchemy.orm import Session
 
-from store.database import get_session
-from store.queries import (
+from shop_api.store.database import get_session
+from shop_api.store.queries import (
     create_item_record,
     delete_item,
     get_item as get_item_record,
@@ -14,8 +14,8 @@ from store.queries import (
     patch_item_record,
     replace_item_record,
 )
-from store.models import Item
-from api.item.contracts import ItemPostRequest, ItemPutRequest, ItemPatchRequest
+from shop_api.store.models import Item
+from shop_api.api.item.contracts import ItemPostRequest, ItemPutRequest, ItemPatchRequest
 
 
 router = APIRouter(prefix="/item")

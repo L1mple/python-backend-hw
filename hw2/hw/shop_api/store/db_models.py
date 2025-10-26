@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import Boolean, CheckConstraint, Float, ForeignKey, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from store.database import Base
+from shop_api.store.database import Base
 
 
 class Cart(Base):

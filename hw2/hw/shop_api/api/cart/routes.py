@@ -5,15 +5,15 @@ from pydantic import NonNegativeInt, PositiveInt
 
 from sqlalchemy.orm import Session
 
-from store.database import get_session
-from store.queries import (
+from shop_api.store.database import get_session
+from shop_api.store.queries import (
     add_cart_item,
     create_cart_record,
     get_cart as get_cart_record,
     get_item,
     list_carts,
 )
-from store.models import Cart
+from shop_api.store.models import Cart
 
 
 router = APIRouter(prefix="/cart")

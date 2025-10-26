@@ -3,8 +3,8 @@ from __future__ import annotations
 from prometheus_client import REGISTRY
 from prometheus_client.core import GaugeMetricFamily
 
-from store.database import init_db, session_scope
-from store.queries import compute_store_statistics
+from shop_api.store.database import init_db, session_scope
+from shop_api.store.queries import compute_store_statistics
 
 
 class StoreMetricsCollector:

@@ -1,0 +1,5 @@
+[run]
+omit =
+    shop_api/isolation_demo.py
+    shop_api/api/metrics/routes.py
+    shop_api/main.py

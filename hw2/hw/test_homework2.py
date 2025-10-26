@@ -7,9 +7,21 @@ from faker import Faker
 from fastapi.testclient import TestClient
 
 from shop_api.main import app
+from shop_api.store import queries as store_queries
+from shop_api.store.database import SessionLocal
 
 client = TestClient(app)
 faker = Faker()
+
+
+@pytest.fixture()
+def db_session():
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.rollback()
+        session.close()
 
 
 @pytest.fixture()
@@ -282,3 +294,62 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+
+def test_get_cart_not_found() -> None:
+    response = client.get("/cart/999999")
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_item_to_cart_missing_cart(existing_item: dict[str, Any]) -> None:
+    response = client.post(f"/cart/999999/add/{existing_item['id']}")
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.json()["detail"] == "Cart not found"
+
+
+def test_add_item_to_cart_missing_item(existing_empty_cart_id: int) -> None:
+    response = client.post(f"/cart/{existing_empty_cart_id}/add/999999")
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.json()["detail"] == "Item not found"
+
+
+def test_add_item_to_cart_update_failure(monkeypatch, existing_empty_cart_id: int, existing_item: dict[str, Any]) -> None:
+    monkeypatch.setattr("shop_api.api.cart.routes.add_cart_item", lambda *a, **k: None)
+
+    response = client.post(f"/cart/{existing_empty_cart_id}/add/{existing_item['id']}")
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert response.json()["detail"] == "Unable to update cart"
+
+
+def test_put_item_not_found() -> None:
+    response = client.put("/item/999999", json={"name": "missing", "price": 1.0})
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_cart_returns_none_when_not_found(db_session) -> None:
+    assert store_queries.get_cart(db_session, -1) is None
+
+
+def test_get_item_returns_none_when_not_found(db_session) -> None:
+    assert store_queries.get_item(db_session, -1) is None
+
+
+def test_replace_item_record_returns_none_when_missing(db_session) -> None:
+    assert store_queries.replace_item_record(db_session, -1, "nope", 1.0) is None
+
+
+def test_add_cart_item_returns_none_when_cart_missing(db_session) -> None:
+    item = store_queries.create_item_record(db_session, "for-missing-cart", 10.0)
+
+    assert store_queries.add_cart_item(db_session, -1, item.id) is None
+
+
+def test_add_cart_item_returns_none_when_item_missing(db_session) -> None:
+    cart = store_queries.create_cart_record(db_session)
+
+    assert store_queries.add_cart_item(db_session, cart.id, -1) is None

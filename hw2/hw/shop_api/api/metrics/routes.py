@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Response
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, generate_latest
 
-import metrics
+from shop_api import metrics as shop_metrics
 
 router = APIRouter()
 

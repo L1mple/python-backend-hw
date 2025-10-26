@@ -3,9 +3,8 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from store.db_models import Cart as CartRecord, CartItem as CartItemRecord, Item as ItemRecord
-from store.models import Cart, CartItem, Item
-
+from shop_api.store.db_models import Cart as CartRecord, CartItem as CartItemRecord, Item as ItemRecord
+from shop_api.store.models import Cart, CartItem, Item
 
 def create_cart_record(session: Session) -> Cart:
     cart_record = CartRecord()

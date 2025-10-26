@@ -9,11 +9,11 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 def _database_url() -> str:
-    return os.getenv("SHOP_DATABASE_URL", "postgresql+psycopg://shop:shop@postgres:5432/shop")
+    return os.getenv("SHOP_DATABASE_URL", "sqlite:///./shop.sqlite3")
 
 
 def _isolation_level() -> str:
-    level = os.getenv("SHOP_DB_ISOLATION_LEVEL", "READ COMMITTED")
+    level = os.getenv("SHOP_DB_ISOLATION_LEVEL", "READ UNCOMMITTED")
     return level.upper()
 
 
@@ -43,7 +43,7 @@ SessionLocal = sessionmaker(
 
 
 def init_db() -> None:
-    from store import db_models
+    from shop_api.store import db_models
 
     Base.metadata.create_all(bind=engine)
 
