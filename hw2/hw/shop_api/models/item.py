@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Literal
 
-from pydantic import BaseModel, Field, conbool, confloat, conint
+from pydantic import BaseModel, Field
 
 
 class ItemCreateRequest(BaseModel):
     name: str = Field(..., min_length=1)
-    price: confloat(gt=0)
+    price: float = Field(gt=0)
 
 
 class ItemCreateResponse(BaseModel):
@@ -27,14 +27,17 @@ class ItemUpdateRequest(ItemCreateRequest):
 
 class ItemPatchRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1)
-    price: Optional[confloat(gt=0)] = None
+    price: Optional[float] = Field(default=None, gt=0)
     # запрещаем обновление статуса deleted — тест ожидает 422
-    deleted: Optional[conbool(strict=True)] = Field(default=None, const=False)
+    deleted: Optional[Literal[False]] = Field(default=None)
+    
+    class Config:
+        extra = "forbid"  # Запрещаем лишние поля - это вызовет 422 для {"odd": "value"}
 
 
 class ItemListQuery(BaseModel):
-    offset: conint(ge=0) | None = None
-    limit: conint(gt=0) | None = None
-    min_price: confloat(ge=0) | None = None
-    max_price: confloat(ge=0) | None = None
-    show_deleted: bool = False
+    offset: Optional[int] = Field(None, ge=0)
+    limit: Optional[int] = Field(None, gt=0)
+    min_price: Optional[float] = Field(None, ge=0)
+    max_price: Optional[float] = Field(None, ge=0)
+    show_deleted: bool = Field(False)

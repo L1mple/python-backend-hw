@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 
 from ..models import CartCreateResponse, CartListQuery, CartResponse
-from services import CartService, ItemService
-from dependencies import get_cart_service
+from ..services import CartService, ItemService
+from ..dependencies import get_cart_service
 
 router = APIRouter()
 
@@ -14,9 +15,15 @@ router = APIRouter()
     response_model=CartCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_cart(cart_service: CartService = Depends(get_cart_service)) -> CartCreateResponse:
+def create_cart(cart_service: CartService = Depends(get_cart_service)):
     response = cart_service.create()
-    return response
+    
+    # Возвращаем ответ с заголовком location
+    return JSONResponse(
+        content={"id": response.id},
+        status_code=status.HTTP_201_CREATED,
+        headers={"location": f"/cart/{response.id}"}
+    )
 
 
 @router.get("/{cart_id}", response_model=CartResponse)

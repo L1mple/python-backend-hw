@@ -1,26 +1,24 @@
-from __future__ import annotations
-
 from functools import lru_cache
-
-from .repositories import CartRepository, ItemRepository
-from .services import CartService, ItemService
+from shop_api.repositories import ItemRepository, CartRepository
+from shop_api.services import ItemService, CartService
+from shop_api.database import get_connection
 
 
 @lru_cache
 def get_item_repository() -> ItemRepository:
-    return ItemRepository()
+    return ItemRepository(get_connection())
 
 
 @lru_cache
 def get_cart_repository() -> CartRepository:
-    return CartRepository(get_item_repository())
+    return CartRepository(get_connection(), get_item_repository())  # передаем и connection, и item_repo
 
 
+@lru_cache
 def get_item_service() -> ItemService:
     return ItemService(get_item_repository())
 
 
+@lru_cache
 def get_cart_service() -> CartService:
-    item_repo = get_item_repository()
-    cart_repo = get_cart_repository()
-    return CartService(cart_repo, item_repo)
+    return CartService(get_cart_repository(), get_item_repository())
