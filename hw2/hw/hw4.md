@@ -125,7 +125,7 @@ python transaction_demos/run_all_demos.py
 
 
 CI/CD:
-- .github/workflows/test.yml - GitHub Actions
+- `.github/workflows/test.yml` - GitHub Actions
 
 
 # Check
