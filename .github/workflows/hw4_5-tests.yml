@@ -25,10 +25,6 @@ jobs:
           --health-timeout=5s
           --health-retries=10
 
-    env:
-      DATABASE_URL: postgresql+psycopg2://user:password@localhost:5432/hw2_db
-      PYTHONPATH: ./hw2/hw
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
