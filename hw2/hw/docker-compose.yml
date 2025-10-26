@@ -1,4 +1,4 @@
-version: "3"
+version: '3.8'
 
 services:
   app:
@@ -8,8 +8,26 @@ services:
       - "8000:8000"
     networks:
       - monitoring
+      - db_network
     depends_on:
+      - db
       - prometheus
+    environment:
+      - DATABASE_URL=postgresql://shop:shop@db:5432/shop
+
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+      POSTGRES_DB: shop
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - db_network
+    ports:
+      - "5432:5432"
 
   prometheus:
     image: prom/prometheus:latest
@@ -39,6 +57,8 @@ services:
 
 networks:
   monitoring:
+  db_network:
 
 volumes:
-  grafana_data: {}
+  grafana_data:
+  postgres_data: {}
