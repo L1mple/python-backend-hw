@@ -132,3 +132,5 @@ dmypy.json
 
 # macOS
 .DS_Store
+
+/lecture4/hw5/.venv

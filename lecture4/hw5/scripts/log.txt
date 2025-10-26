@@ -1,0 +1,28 @@
+START 2025-10-26T15:31:19.058475Z
+== DIRTY READ ==
+T2@RC read=150
+after_rollback=150
+PASS
+== NON-REPEATABLE READ @ READ COMMITTED ==
+first=150 second=250
+PASS
+== NO NON-REPEATABLE READ @ REPEATABLE READ ==
+first=150 second=150
+PASS
+== PHANTOM @ READ COMMITTED ==
+first=1 second=2
+PASS
+== NO PHANTOM @ REPEATABLE READ ==
+first=1 second=1
+PASS
+== WRITE SKEW: RR vs SERIALIZABLE ==
+RR reads=2,2 commits=commit,commit final_working=0
+SER reads=2,2 commits=commit,rollback final_working=1
+PASS
+SUMMARY pass=6 skip=0 fail=0
+dirty_read: PASS
+nonrepeat_rc: PASS
+nonrepeat_rr: PASS
+phantom_rc: PASS
+phantom_rr: PASS
+serializable_ws: PASS
