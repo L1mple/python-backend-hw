@@ -7,9 +7,22 @@ services:
       context: .
       dockerfile: ./Dockerfile
       target: local
+    depends_on:
+      db:
+        condition: service_started
     restart: always
     ports:
       - 8080:8080
+  
+  db:
+    image: postgres:latest
+    ports:
+      - 5432:5432
+    restart: always
+    environment:
+      POSTGRES_DB: production
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
 
   grafana:
     image: grafana/grafana:latest
