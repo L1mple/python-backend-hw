@@ -20,4 +20,6 @@ RUN pip install -r requirements.txt
 
 FROM base as local
 
-CMD ["pytest", "-vv", "--showlocals", "--strict", "./test_homework2.py"]
+CMD ["bash", "-c", "\
+    SHOP_API_DB_TYPE=in-memory pytest -vv --cov=. --cov-report= --showlocals --strict ./test_homework2.py && \
+    SHOP_API_DB_TYPE=postgres pytest -vv --cov=. --cov-append --cov-report=term-missing --showlocals --strict ./test_homework2.py"]

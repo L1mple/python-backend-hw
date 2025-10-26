@@ -15,6 +15,8 @@ services:
       SHOP_API_DB_TYPE: postgres
       POSTGRES_ADDRESS: postgres
       POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy

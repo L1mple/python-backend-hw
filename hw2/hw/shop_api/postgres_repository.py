@@ -77,9 +77,11 @@ class Repository:
     engine: Engine
 
     def __init__(self):
+        postgres_user = os.environ['POSTGRES_USER']
+        postgres_password = os.environ['POSTGRES_PASSWORD']
         postgres_address = os.environ['POSTGRES_ADDRESS']
         postgres_port = os.environ['POSTGRES_PORT']
-        self.engine = create_engine(f'postgresql+psycopg2://user:password@{postgres_address}:{postgres_port}/shop_api')
+        self.engine = create_engine(f'postgresql+psycopg2://{postgres_user}:{postgres_password}@{postgres_address}:{postgres_port}/shop_api')
         Base.metadata.create_all(self.engine)
 
     def create_cart(self) -> models.Cart:
