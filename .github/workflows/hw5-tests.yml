@@ -1,0 +1,38 @@
+name: Python application tests
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ 'hw2/tests/**' ]
+  push:
+    branches: [ main ]
+    paths: [ 'hw2/tests/**' ]
+
+jobs:
+  test-hw5:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      working-directory: hw2/hw
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r hw/requirements.txt
+
+    - name: Run tests
+      working-directory: hw2/hw
+      env:
+        PYTHONPATH: ${{ github.workspace }}/hw2/hw
+      run: |
+        pytest tests/test_api.py --cov=shop_api --cov-report=term-missing --cov-fail-under=95
