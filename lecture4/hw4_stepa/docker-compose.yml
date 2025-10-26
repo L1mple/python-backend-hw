@@ -1,0 +1,21 @@
+services:
+  database:
+    image: postgres:16
+    container_name: stepa_shop_db
+    environment:
+      POSTGRES_DB: stepa_shop_db
+      POSTGRES_USER: stepa_user
+      POSTGRES_PASSWORD: stepa_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stepa_user -d stepa_shop_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
