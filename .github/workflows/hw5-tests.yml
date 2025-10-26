@@ -1,4 +1,4 @@
-name: Python application tests
+name: "HW5 Tests"
 
 on:
   pull_request:
