@@ -1,4 +1,4 @@
-name: Run tests HW2
+name: Run tests HW4 and HW5
 
 on:
   push:
