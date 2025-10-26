@@ -1,18 +1,67 @@
 import random
 import string
+import time
 from typing import Dict, List, Optional
 
+from database import engine, get_db
 from fastapi import (
+    Depends,
     FastAPI,
     HTTPException,
+    Request,
     Response,
     WebSocket,
     WebSocketDisconnect,
     status,
 )
+from models import Base
+from models import Cart as DBCart
+from models import CartItem as DBCartItem
+from models import Item as DBItem
+from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.orm import Session
+
+# Создание таблиц в базе данных
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Shop API")
+
+# Инициализация метрик Prometheus
+REQUEST_COUNT = Counter(
+    "http_requests_total", "Total HTTP Requests", ["method", "endpoint", "status_code"]
+)
+
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
+)
+
+ITEMS_COUNT = Gauge("shop_items_total", "Total number of items")
+CARTS_COUNT = Gauge("shop_carts_total", "Total number of carts")
+
+
+@app.middleware("http")
+async def monitor_requests(request: Request, call_next):
+    method = request.method
+    endpoint = request.url.path
+
+    if endpoint == "/metrics":
+        return await call_next(request)
+
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+
+    REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(process_time)
+    REQUEST_COUNT.labels(
+        method=method, endpoint=endpoint, status_code=response.status_code
+    ).inc()
+
+    return response
+
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 
 # Модели данных
@@ -22,6 +71,9 @@ class Item(BaseModel):
     price: float = Field(gt=0)
     deleted: bool = False
 
+    class Config:
+        from_attributes = True
+
 
 class CartItem(BaseModel):
     id: int
@@ -29,26 +81,23 @@ class CartItem(BaseModel):
     quantity: int = Field(ge=1)
     available: bool
 
+    class Config:
+        from_attributes = True
+
 
 class Cart(BaseModel):
     id: int
     items: List[CartItem] = []
     price: float = Field(ge=0)
 
-
-# Хранилище данных в памяти
-items_db: Dict[int, Item] = {}
-carts_db: Dict[int, Cart] = {}
-next_item_id = 1
-next_cart_id = 1
+    class Config:
+        from_attributes = True
 
 
-# WebSocket Chat Manager
 class ConnectionManager:
     """Управляет WebSocket соединениями для разных комнат чата"""
 
     def __init__(self):
-        # Словарь: chat_name -> список кортежей (websocket, username)
         self.active_connections: Dict[str, List[tuple[WebSocket, str]]] = {}
 
     def generate_username(self) -> str:
@@ -86,7 +135,6 @@ class ConnectionManager:
                 for ws, user in self.active_connections[chat_name]
                 if ws != websocket
             ]
-            # Удаляем комнату, если она пустая
             if not self.active_connections[chat_name]:
                 del self.active_connections[chat_name]
 
@@ -97,17 +145,14 @@ class ConnectionManager:
 
         formatted_message = f"{sender_username} :: {message}"
 
-        # Список соединений для удаления (если возникнут ошибки)
         to_remove = []
 
         for websocket, username in self.active_connections[chat_name]:
             try:
                 await websocket.send_text(formatted_message)
             except Exception:
-                # Соединение разорвано, помечаем для удаления
                 to_remove.append(websocket)
 
-        # Удаляем проблемные соединения
         for ws in to_remove:
             self.disconnect(ws, chat_name)
 
@@ -115,7 +160,6 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-# WebSocket endpoint для чата
 @app.websocket("/chat/{chat_name}")
 async def websocket_chat_endpoint(websocket: WebSocket, chat_name: str):
     """WebSocket endpoint для чата с поддержкой комнат"""
@@ -123,58 +167,53 @@ async def websocket_chat_endpoint(websocket: WebSocket, chat_name: str):
 
     try:
         while True:
-            # Получаем текстовое сообщение от клиента
             message = await websocket.receive_text()
 
-            # Broadcast сообщение всем в комнате
             await manager.broadcast(message, chat_name, username)
 
     except WebSocketDisconnect:
-        # Пользователь отключился
         manager.disconnect(websocket, chat_name)
 
 
-# Вспомогательные функции
-def get_next_item_id() -> int:
-    global next_item_id
-    next_item_id += 1
-    return next_item_id - 1
-
-
-def get_next_cart_id() -> int:
-    global next_cart_id
-    next_cart_id += 1
-    return next_cart_id - 1
-
-
-def calculate_cart_price(cart: Cart) -> float:
+def calculate_cart_price(db: Session, cart: DBCart) -> float:
     total = 0.0
-    for item in cart.items:
-        if item.available:
-            item_obj = items_db.get(item.id)
-            if item_obj and not item_obj.deleted:
-                total += item_obj.price * item.quantity
+    for cart_item in cart.cart_items:
+        item = cart_item.item
+        if not item.deleted:
+            total += item.price * cart_item.quantity
     return total
 
 
-# Эндпоинты для корзин
 @app.post("/cart", status_code=status.HTTP_201_CREATED)
-async def create_cart(response: Response):
-    cart_id = get_next_cart_id()
-    cart = Cart(id=cart_id, items=[], price=0.0)
-    carts_db[cart_id] = cart
-    response.headers["location"] = f"/cart/{cart_id}"
-    return {"id": cart_id}
+async def create_cart(response: Response, db: Session = Depends(get_db)):
+    db_cart = DBCart()
+    db.add(db_cart)
+    db.commit()
+    db.refresh(db_cart)
+
+    response.headers["location"] = f"/cart/{db_cart.id}"
+    return {"id": db_cart.id}
 
 
 @app.get("/cart/{cart_id}")
-async def get_cart(cart_id: int):
-    if cart_id not in carts_db:
+async def get_cart(cart_id: int, db: Session = Depends(get_db)):
+    db_cart = db.query(DBCart).filter(DBCart.id == cart_id).first()
+    if not db_cart:
         raise HTTPException(status_code=404, detail="Cart not found")
 
-    cart = carts_db[cart_id]
-    # Пересчитываем цену на случай изменений в товарах
-    cart.price = calculate_cart_price(cart)
+    items = []
+    for cart_item in db_cart.cart_items:
+        items.append(
+            CartItem(
+                id=cart_item.item.id,
+                name=cart_item.item.name,
+                quantity=cart_item.quantity,
+                available=not cart_item.item.deleted,
+            )
+        )
+
+    cart = Cart(id=db_cart.id, items=items, price=calculate_cart_price(db, db_cart))
+
     return cart
 
 
@@ -186,6 +225,7 @@ async def get_carts(
     max_price: Optional[float] = None,
     min_quantity: Optional[int] = None,
     max_quantity: Optional[int] = None,
+    db: Session = Depends(get_db),
 ):
     # Валидация параметров
     if offset < 0:
@@ -201,30 +241,37 @@ async def get_carts(
     if max_quantity is not None and max_quantity < 0:
         raise HTTPException(status_code=422, detail="Max quantity must be non-negative")
 
-    carts = list(carts_db.values())
+    query = db.query(DBCart)
+    carts = query.offset(offset).limit(limit).all()
 
-    # Применяем фильтры
     filtered_carts = []
-    for cart in carts:
-        # Пересчитываем цену для каждого запроса
-        cart.price = calculate_cart_price(cart)
+    for db_cart in carts:
+        items = []
+        for cart_item in db_cart.cart_items:
+            items.append(
+                CartItem(
+                    id=cart_item.item.id,
+                    name=cart_item.item.name,
+                    quantity=cart_item.quantity,
+                    available=not cart_item.item.deleted,
+                )
+            )
+
+        cart_model = Cart(
+            id=db_cart.id, items=items, price=calculate_cart_price(db, db_cart)
+        )
 
         # Фильтр по цене
-        if min_price is not None and cart.price < min_price:
+        if min_price is not None and cart_model.price < min_price:
             continue
-        if max_price is not None and cart.price > max_price:
+        if max_price is not None and cart_model.price > max_price:
             continue
 
-        filtered_carts.append(cart)
+        filtered_carts.append(cart_model)
 
-    # Применяем пагинацию
-    paginated_carts = filtered_carts[offset : offset + limit]
-
-    # ВАЖНО: фильтр по quantity применяется к суммарному количеству
-    # товаров во ВСЕХ возвращаемых корзинах (после пагинации)
     if min_quantity is not None or max_quantity is not None:
         total_quantity = sum(
-            item.quantity for cart in paginated_carts for item in cart.items
+            item.quantity for cart in filtered_carts for item in cart.items
         )
 
         if min_quantity is not None and total_quantity < min_quantity:
@@ -232,40 +279,45 @@ async def get_carts(
         if max_quantity is not None and total_quantity > max_quantity:
             return []
 
-    return paginated_carts
+    return filtered_carts
 
 
 @app.post("/cart/{cart_id}/add/{item_id}")
-async def add_to_cart(cart_id: int, item_id: int):
-    if cart_id not in carts_db:
+async def add_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_db)):
+    # Проверяем существование корзины
+    db_cart = db.query(DBCart).filter(DBCart.id == cart_id).first()
+    if not db_cart:
         raise HTTPException(status_code=404, detail="Cart not found")
-    if item_id not in items_db:
+
+    # Проверяем существование товара
+    db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    item = items_db[item_id]
-    if item.deleted:
+    if db_item.deleted:
         raise HTTPException(status_code=400, detail="Item is deleted")
 
-    cart = carts_db[cart_id]
-
     # Проверяем, есть ли товар уже в корзине
-    for cart_item in cart.items:
-        if cart_item.id == item_id:
-            cart_item.quantity += 1
-            cart.price = calculate_cart_price(cart)
-            return {"message": "Item quantity increased"}
-
-    # Добавляем новый товар
-    cart_item = CartItem(
-        id=item_id, name=item.name, quantity=1, available=not item.deleted
+    db_cart_item = (
+        db.query(DBCartItem)
+        .filter(DBCartItem.cart_id == cart_id, DBCartItem.item_id == item_id)
+        .first()
     )
-    cart.items.append(cart_item)
-    cart.price = calculate_cart_price(cart)
 
-    return {"message": "Item added to cart"}
+    if db_cart_item:
+        db_cart_item.quantity += 1
+        db.commit()
+        db.refresh(db_cart_item)
+        return {"message": "Item quantity increased"}
+    else:
+        # Добавляем новый товар
+        new_cart_item = DBCartItem(cart_id=cart_id, item_id=item_id, quantity=1)
+        db.add(new_cart_item)
+        db.commit()
+        db.refresh(new_cart_item)
+        return {"message": "Item added to cart"}
 
 
-# Эндпоинты для товаров
 class ItemCreate(BaseModel):
     name: str
     price: float = Field(gt=0)
@@ -288,24 +340,27 @@ class ItemPatch(BaseModel):
 
 
 @app.post("/item", status_code=status.HTTP_201_CREATED)
-async def create_item(item: ItemCreate):
-    item_id = get_next_item_id()
-    new_item = Item(id=item_id, name=item.name, price=item.price)
-    items_db[item_id] = new_item
-    return new_item
+async def create_item(item: ItemCreate, db: Session = Depends(get_db)):
+    db_item = DBItem(name=item.name, price=item.price)
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+
+    ITEMS_COUNT.inc()
+
+    return Item.model_validate(db_item)
 
 
 @app.get("/item/{item_id}")
-async def get_item(item_id: int):
-    if item_id not in items_db:
+async def get_item(item_id: int, db: Session = Depends(get_db)):
+    db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    item = items_db[item_id]
-    # Возвращаем 404 для удаленных товаров
-    if item.deleted:
+    if db_item.deleted:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    return item
+    return Item.model_validate(db_item)
 
 
 @app.get("/item")
@@ -315,6 +370,7 @@ async def get_items(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     show_deleted: bool = False,
+    db: Session = Depends(get_db),
 ):
     # Валидация параметров
     if offset < 0:
@@ -326,65 +382,76 @@ async def get_items(
     if max_price is not None and max_price < 0:
         raise HTTPException(status_code=422, detail="Max price must be non-negative")
 
-    items = list(items_db.values())
+    query = db.query(DBItem)
 
-    # Фильтрация
-    filtered_items = []
-    for item in items:
-        if not show_deleted and item.deleted:
-            continue
+    if not show_deleted:
+        query = query.filter(DBItem.deleted == False)
 
-        if min_price is not None and item.price < min_price:
-            continue
-        if max_price is not None and item.price > max_price:
-            continue
-
-        filtered_items.append(item)
+    if min_price is not None:
+        query = query.filter(DBItem.price >= min_price)
+    if max_price is not None:
+        query = query.filter(DBItem.price <= max_price)
 
     # Пагинация
-    result = filtered_items[offset : offset + limit]
-    return result
+    items = query.offset(offset).limit(limit).all()
+
+    return [Item.model_validate(item) for item in items]
 
 
 @app.put("/item/{item_id}")
-async def update_item(item_id: int, item_update: ItemPut):
-    if item_id not in items_db:
+async def update_item(
+    item_id: int, item_update: ItemPut, db: Session = Depends(get_db)
+):
+    db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    existing_item = items_db[item_id]
-    if existing_item.deleted:
+    if db_item.deleted:
         raise HTTPException(status_code=400, detail="Cannot update deleted item")
 
     # Обновляем поля
-    existing_item.name = item_update.name
-    existing_item.price = item_update.price
+    db_item.name = item_update.name
+    db_item.price = item_update.price
 
-    return existing_item
+    db.commit()
+    db.refresh(db_item)
+
+    return Item.model_validate(db_item)
 
 
 @app.patch("/item/{item_id}")
-async def partial_update_item(item_id: int, item_update: ItemPatch):
-    if item_id not in items_db:
+async def partial_update_item(
+    item_id: int, item_update: ItemPatch, db: Session = Depends(get_db)
+):
+    db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    existing_item = items_db[item_id]
-
     # Для удаленных товаров возвращаем 304 NOT_MODIFIED
-    if existing_item.deleted:
+    if db_item.deleted:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED)
 
     # Обновляем только переданные поля
     update_data = item_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(existing_item, field, value)
+        setattr(db_item, field, value)
 
-    return existing_item
+    db.commit()
+    db.refresh(db_item)
+
+    return Item.model_validate(db_item)
 
 
 @app.delete("/item/{item_id}")
-async def delete_item(item_id: int):
-    if item_id not in items_db:
+async def delete_item(item_id: int, db: Session = Depends(get_db)):
+    db_item = db.query(DBItem).filter(DBItem.id == item_id).first()
+    if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    items_db[item_id].deleted = True
+    db_item.deleted = True
+    db.commit()
+
+    # Обновляем метрику
+    ITEMS_COUNT.dec()
+
     return {"message": "Item deleted successfully"}

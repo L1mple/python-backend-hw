@@ -1,18 +1,60 @@
 import random
 import string
+import time
 from typing import Dict, List, Optional
 
 from fastapi import (
     FastAPI,
     HTTPException,
+    Request,
     Response,
     WebSocket,
     WebSocketDisconnect,
     status,
 )
+from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
 from pydantic import BaseModel, ConfigDict, Field
 
 app = FastAPI(title="Shop API")
+
+# Инициализация метрик Prometheus
+REQUEST_COUNT = Counter(
+    "http_requests_total", "Total HTTP Requests", ["method", "endpoint", "status_code"]
+)
+
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
+)
+
+ITEMS_COUNT = Gauge("shop_items_total", "Total number of items")
+CARTS_COUNT = Gauge("shop_carts_total", "Total number of carts")
+
+
+# Middleware для отслеживания запросов
+@app.middleware("http")
+async def monitor_requests(request: Request, call_next):
+    method = request.method
+    endpoint = request.url.path
+
+    # Исключаем эндпоинт метрик из мониторинга
+    if endpoint == "/metrics":
+        return await call_next(request)
+
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+
+    REQUEST_LATENCY.labels(method=method, endpoint=endpoint).observe(process_time)
+    REQUEST_COUNT.labels(
+        method=method, endpoint=endpoint, status_code=response.status_code
+    ).inc()
+
+    return response
+
+
+# Добавляем эндпоинт для метрик
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 
 # Модели данных
