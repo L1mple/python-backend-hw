@@ -25,9 +25,6 @@ def create_item():
     return create
 
 def test_create_and_check_cart():
-    get_response = client.get(f"/cart/{100000}")
-    assert get_response.status_code == 404
-
     response_post = client.post("/cart")
     assert response_post.status_code == 201
 
@@ -70,9 +67,13 @@ def test_update_item(create_item_body):
     assert put_response.json()["name"] == "name"
     assert put_response.json()["price"] == 100.0
 
-    patch_response = client.patch(f"item/{item_id}", json={"name": "updated"})
+    patch_response = client.patch(f"item/{item_id}", json={"name": "updated", "price": 200.0})
     assert patch_response.json()["name"] == "updated"
+    assert patch_response.json()["price"] == 200.0
 
+    client.delete(f"/item/{item_id}")
+    patch_response = client.patch(f"item/{item_id}", json={"name": "deleted"})
+    assert patch_response.status_code == 304
 
 def test_filter_items(create_item):
     create_item(price=3)
@@ -90,6 +91,25 @@ def test_filter_carts(create_item):
     cart_id = client.post("/cart").json()["id"]
 
     client.post(f"/cart/{cart_id}/add/{item_id}")
-    response = client.get("/cart", params={"max_price": 12})
+    response = client.get("/cart", params={"max_price": 13, "min_price": 10, "max_quantity": 2, "min_quantity": 1})
     assert response.status_code == 200
-    assert len(response.json()) > 1
+    assert len(response.json()) >= 1
+
+    response = client.get("/cart", params={"max_price": 1, "min_quantity": 1000000})
+    assert len(response.json()) == 0
+
+    response = client.get("/cart", params={"max_quantity": 1, "min_price": 100000})
+    assert len(response.json()) == 0
+
+def test_not_found():
+    get_response = client.get(f"/cart/{100000}")
+    assert get_response.status_code == 404
+
+    get_response = client.get(f"/item/{100000}")
+    assert get_response.status_code == 404
+
+    post_response = client.delete(f"/item/{100000}")
+    assert post_response.status_code == 404
+
+    patch_response = client.patch(f"item/{10000}", json={"name": "test"})
+    assert patch_response.status_code == 404

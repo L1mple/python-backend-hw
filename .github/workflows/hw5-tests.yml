@@ -50,5 +50,5 @@ jobs:
       - name: Tests
         working-directory: hw2/hw
         run: |
-          pytest -vv tests --cov=shop_api --cov-report=term-missing
+          pytest -vv tests/test.py --cov=shop_api --cov-report=term-missing
 
