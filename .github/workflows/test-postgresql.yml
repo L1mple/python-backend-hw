@@ -35,7 +35,7 @@ jobs:
 
       - name: Install uv
         run: |
-          pip intall uv
+          pip install uv
 
       - name: Install dependencies
         run: |
