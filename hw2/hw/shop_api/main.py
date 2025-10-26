@@ -4,6 +4,7 @@ from time import perf_counter
 from .api.cart import router as cart_router
 from .api.item import router as item_router
 from .grpc_server import serve as grpc_serve
+from .storage import init_db
 
 # Prometheus metrics
 from prometheus_client import (
@@ -33,6 +34,8 @@ app = FastAPI(title="Shop API")
 
 app.include_router(item_router)
 app.include_router(cart_router)
+# Ensure DB is ready even if startup hooks are not executed by the test client
+init_db()
 
 
 @app.middleware("http")
@@ -77,6 +80,8 @@ _grpc_server = None
 @app.on_event("startup")
 def _start_grpc_server() -> None:
     global _grpc_server
+    # Init SQLite database
+    init_db()
     # Start gRPC server in background thread
     _grpc_server = grpc_serve(block=False)
 
