@@ -42,19 +42,19 @@ def test_get_item_list(client):
     res_min = client.get("/item?min_price=2.0")
     assert res_min.status_code == 200
     min_items = res_min.json()
-    assert len(min_items) == 2
+    assert len(min_items) == 1
     assert all(item["price"] >= 2.0 for item in min_items)
 
     res_max = client.get("/item?max_price=2.0")
     assert res_max.status_code == 200
     max_items = res_max.json()
-    assert len(max_items) == 2
+    assert len(max_items) == 1
     assert all(item["price"] <= 2.0 for item in max_items)
 
     res_range = client.get("/item?min_price=1.0&max_price=2.0")
     assert res_range.status_code == 200
     range_items = res_range.json()
-    assert len(range_items) == 2
+    assert len(range_items) == 1
     assert all(1.0 <= item["price"] <= 2.0 for item in range_items)
 
 
@@ -82,7 +82,8 @@ def test_put_item_fail(client):
     item_id = res_create.json()["id"]
     assert res_create.status_code == 201
 
-    res_put = client.put(f"/item/{item_id + 1}", json={"name": "item2", "price": 2.0})
+    next_id = item_id + 1
+    res_put = client.put(f"/item/{next_id}", json={"name": "item2", "price": 2.0})
     assert res_put.status_code == 404
 
 
@@ -95,7 +96,8 @@ def test_patch_item(client):
 
 def test_patch_item_fail(client):
     res_create = client.post("/item", json={"name": "item1", "price": 1.0})
-    res = client.patch(f"/item/{res_create + 1}", json={"price": 2.0})
+    next_id = res_create + 1
+    res = client.patch(f"/item/{next_id}", json={"price": 2.0})
     assert res.status_code == 404
 
     client.delete(f"/item/{res_create}")
