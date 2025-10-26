@@ -1,6 +1,11 @@
-from typing import List, Iterable
+from typing import List
 
 from enum import Enum
+from sqlalchemy import create_engine, select, delete, and_
+from sqlalchemy.orm import sessionmaker
+from contextlib import contextmanager
+
+from hw2.hw.shop_api.entities import Cart, Item, CartItemAssociation, base
 
 from hw2.hw.shop_api.contracts import PutItemRequest
 from .models import (
@@ -13,122 +18,239 @@ from .models import (
     PatchItemInfo,
 )
 
-_carts = dict[int, CartInfo]()
-_items = dict[int, ItemInfo]()
+import os
 
-def int_id_generator() -> Iterable[int]:
-    i = 0
-    while True:
-        yield i
-        i += 1
-
-_cart_id_generator: Iterable[int] = int_id_generator()
-
-_item_id_generator: Iterable[int] = int_id_generator()
-
-def create_cart() -> int:
-    id: int = next(_cart_id_generator)
-    _carts[id] = CartInfo(items=[], price=0)
-    return id
-
-def add_item(info: ItemInfo) -> ItemEntity:
-    _id = next(_item_id_generator)
-    _items[_id] = info
+def get_database_url():
+    default_url = "postgresql://shop_user:shop_password@postgres:5432/shop_db"
+    url = os.getenv('DATABASE_URL', default_url)
     
-    return ItemEntity(id = _id, info = info)
+    if isinstance(url, bytes):
+        url = url.decode('latin-1')
 
-def delete_card(id: int) -> None:
-    if id in _carts:
-        del _carts[id]
+    url = url.strip()
+    
+    return url
 
-def delete_item(id: int) -> None:
-    if id in _items:
-        del _items[id]
-
-def get_cart(id: int) -> CartEntity | None:
-    if id not in _carts:
-        return None
-
-    return CartEntity(id=id, info = _carts[id])
-
-def get_all_carts() -> List[CartEntity]:
-     return [CartEntity(id=id, info=info) for id, info in list(_carts.items())]
-
-def get_item(id: int) -> ItemEntity | None:
-    if id not in _items:
-        return None
-
-    return ItemEntity(id=id, info = _items[id])
-
-def get_all_items() -> List[ItemEntity]:
-     return [ItemEntity(id=id, info=info) for id, info in list(_items.items())]
-
-def add_item_to_cart(cart_id: int, item: ItemEntity) -> bool:
-    if cart_id not in _carts:
-        return False
+class DatabaseStore:
+    
+    def __init__(self, database_url: str = get_database_url()):
+        self.engine = create_engine(database_url)
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         
-    cart = _carts[cart_id]
+        base.metadata.create_all(bind=self.engine)
         
-    if item.id in [item.id for item in cart.items]:
-        for cart_item in cart.items:
-            if cart_item.id == item.id:
-                cart_item.info.quantity += 1
-                break
-        
-    new_cart_item = CartItemEntity(
-        id=item.id,
-        info = CartItemInfo(
-            name=item.info.name,
-            quantity=1,
-            available=not item.info.deleted
+    @contextmanager
+    def get_session(self):
+        session = self.SessionLocal()
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def create_cart(self) -> int:
+        with self.get_session() as session:
+            cart = Cart()
+            session.add(cart)
+            session.flush()
+            cart_id = cart.id
+            return cart_id
+
+    def add_item(self, info: ItemInfo) -> ItemEntity:
+         with self.get_session() as session:
+            item = Item(
+                name=info.name,
+                price=info.price,
+                deleted=info.deleted
             )
-        )
-    cart.items.append(new_cart_item)
-        
-    cart.price = sum(cart_item.info.quantity * _items[cart_item.id].price 
-        for cart_item in cart.items if cart_item.info.available)
-        
-    _carts[cart_id] = cart   
-    
-    return True
+            session.add(item)
+            session.flush()
 
-def update_item(item_id: int, item_data: ItemInfo) -> bool:
-    if item_id not in _items:
-        return False
-    _items[item_id] = item_data
-    return True
+            return ItemEntity(
+                id=item.id,
+                info=ItemInfo(
+                    name=item.name,
+                    price=float(item.price),
+                    deleted=item.deleted
+                )
+            )
 
-def put_item(item_id: int, request: PutItemRequest) -> ItemEntity | None:
-    if item_id not in _items:
-        return None
-    existing = _items[item_id]
-    if existing.deleted:
-        return None
-    existing.name = request.name
-    existing.price = request.price
-    return ItemEntity(item_id, existing)        
+    def delete_cart(self, id: int) -> None:
+        with self.get_session() as session:
+            cart = session.get(Cart, id)
+            if cart:
+                session.execute(
+                    delete(CartItemAssociation)
+                    .where(CartItemAssociation.cart_id == id)
+                )
+                session.delete(cart)
 
-class PatchResult(Enum):
-    NotFound = 0
-    NotModified = 1
-    Unprocessable = 2
+    def delete_item(self, id: int) -> None:
+        with self.get_session() as session:
+            item = session.get(Item, id)
+            if item:
+                item.deleted = True
 
-def patch_item(item_id: int, patch_info: PatchItemInfo) -> ItemEntity | PatchResult:
-    if item_id not in _items:
-        return PatchResult.NotModified
-    
-    existing = _items[item_id]
-    
-    if existing.deleted:
-        return PatchResult.NotModified
-    
-    if patch_info.name is not None:
-        existing.name = patch_info.name
-        
-        
-    if patch_info.price is not None and patch_info.price < 0:
-        return PatchResult.Unprocessable
-    elif patch_info.price is not None:
-        existing.price = patch_info.price
-        
-    return ItemEntity(id=item_id, info = _items[item_id])
+    def get_cart(self, id: int) -> CartEntity | None:
+        with self.get_session() as session:
+            cart = session.get(Cart, id)
+            if not cart:
+                return None
+            
+            cart_items = []
+            total_price = 0
+            
+            for association in cart.cart_item_associations:
+                item = association.item
+                if not item.deleted:
+                    cart_item_entity = CartItemEntity(
+                        id=item.id,
+                        info=CartItemInfo(
+                            name=item.name,
+                            quantity=association.quantity,
+                            available=not item.deleted
+                        )
+                    )
+                    cart_items.append(cart_item_entity)
+                    total_price += item.price * association.quantity
+            
+            cart_info = CartInfo(
+                items=cart_items,
+                price=total_price
+            )
+            
+            return CartEntity(id=cart.id, info=cart_info)
+
+    def get_all_carts(self) -> List[CartEntity]:
+        with self.get_session() as session:
+            carts = session.execute(select(Cart)).scalars().all()
+            result = []
+            
+            for cart in carts:
+                cart_entity = self.get_cart(cart.id)
+                if cart_entity:
+                    result.append(cart_entity)
+            
+            return result
+
+    def get_item(self, id: int) -> ItemEntity | None:
+        with self.get_session() as session:
+            item = session.get(Item, id)
+            if not item:
+                return None
+            
+            return ItemEntity(
+                id=item.id,
+                info=ItemInfo(
+                    name=item.name,
+                    price=item.price,
+                    deleted=item.deleted
+                )
+            )
+
+    def get_all_items(self) -> List[ItemEntity]:
+        with self.get_session() as session:
+            items = session.execute(select(Item)).scalars().all()
+            return [
+                ItemEntity(
+                    id=item.id,
+                    info=ItemInfo(
+                        name=item.name,
+                        price=item.price,
+                        deleted=item.deleted
+                    )
+                )
+                for item in items
+            ]
+
+    def add_item_to_cart(self, cart_id: int, item: ItemEntity) -> bool:
+        with self.get_session() as session:
+            cart = session.get(Cart, cart_id)
+            if not cart:
+                return False
+            
+            db_item = session.get(Item, item.id)
+            if not db_item or db_item.deleted:
+                return False
+            
+            existing_association = session.execute(
+                select(CartItemAssociation)
+                .where(
+                    and_(
+                        CartItemAssociation.cart_id == cart_id,
+                        CartItemAssociation.item_id == item.id
+                    )
+                )
+            ).scalar_one_or_none()
+            
+            if existing_association:
+                existing_association.quantity += 1
+            else:
+                association = CartItemAssociation(
+                    cart_id=cart_id,
+                    item_id=item.id,
+                    quantity=1
+                )
+                session.add(association)
+            
+            return True
+
+    def put_item(self, item_id: int, request: PutItemRequest) -> ItemEntity | None:
+        with self.get_session() as session:
+            item = session.get(Item, item_id)
+            if not item or item.deleted:
+                return None
+            
+            item.name = request.name
+            item.price = request.price
+            
+            return ItemEntity(
+                id=item.id,
+                info=ItemInfo(
+                    name=item.name,
+                    price=item.price,
+                    deleted=item.deleted
+                )
+            )       
+
+    class PatchResult(Enum):
+        NotFound = 0
+        NotModified = 1
+        Unprocessable = 2
+
+    def patch_item(self, item_id: int, patch_info: PatchItemInfo) -> ItemEntity | PatchResult: 
+        with self.get_session() as session:
+            item = session.get(Item, item_id)
+            if not item:
+                return self.PatchResult.NotFound
+            
+            if item.deleted:
+                return self.PatchResult.NotModified
+            
+            modified = False
+            
+            if patch_info.name is not None and patch_info.name != item.name:
+                item.name = patch_info.name
+                modified = True
+            
+            if patch_info.price is not None:
+                if patch_info.price < 0:
+                    return self.PatchResult.Unprocessable
+                if patch_info.price != item.price:
+                    item.price = patch_info.price
+                    modified = True
+            
+            if not modified:
+                return self.PatchResult.NotModified
+            
+            return ItemEntity(
+                id=item.id,
+                info=ItemInfo(
+                    name=item.name,
+                    price=item.price,
+                    deleted=item.deleted
+                )
+            )

@@ -17,9 +17,11 @@ from hw2.hw.shop_api.models import ItemEntity
 cartRouter = APIRouter(prefix="/cart")
 itemRouter = APIRouter(prefix="/item")
 
+databaseStore = store.DatabaseStore()
+
 @cartRouter.post("/", status_code=HTTPStatus.CREATED)
 async def create_cart(response: Response):
-    id = store.create_cart()
+    id = databaseStore.create_cart()
     
     # as REST states one should provide uri to newly created resource in location header
     response.headers["location"] = f"/cart/{id}"
@@ -39,7 +41,7 @@ async def create_cart(response: Response):
     },
 )
 async def get_cart(id: int) -> CartResponse:
-    cart = store.get_cart(id)
+    cart = databaseStore.get_cart(id)
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart not found")
     return CartResponse.from_entity(cart)
@@ -54,7 +56,7 @@ async def get_carts(
     min_quantity: Optional[int] = Query(None, ge=0),
     max_quantity: Optional[int] = Query(None, ge=0)
 ) -> list[CartResponse]:
-    carts = store.get_all_carts()
+    carts = databaseStore.get_all_carts()
     
     if min_price is not None:
         carts = [cart for cart in carts if cart.info.price >= min_price]
@@ -73,11 +75,11 @@ async def get_carts(
 
 @cartRouter.post("/{cart_id}/add/{item_id}")
 def add_item_to_cart(cart_id: int, item_id: int):
-    item = store.get_item(item_id)
+    item = databaseStore.get_item(item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     
-    success = store.add_item_to_cart(cart_id, item)
+    success = databaseStore.add_item_to_cart(cart_id, item)
     if not success:
         raise HTTPException(status_code=404, detail="Cart not found")
     
@@ -89,7 +91,7 @@ def add_item_to_cart(cart_id: int, item_id: int):
     status_code=HTTPStatus.CREATED,
 )
 def post_item(info: ItemRequest, response: Response) -> ItemResponse:
-    entity = store.add_item(info.as_item_info())
+    entity = databaseStore.add_item(info.as_item_info())
 
     # as REST states one should provide uri to newly created resource in location header
     response.headers["location"] = f"/item/{entity.id}"
@@ -109,7 +111,7 @@ def post_item(info: ItemRequest, response: Response) -> ItemResponse:
     },
 )
 async def get_item(item_id: int) -> ItemResponse:
-    item = store.get_item(item_id)
+    item = databaseStore.get_item(item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     return ItemResponse.from_entity(item)
@@ -123,7 +125,7 @@ async def get_items(
     max_price: Optional[float] = Query(None, ge=0),
     show_deleted: Optional[bool] = Query(False),
 ) -> list[ItemResponse]:
-    items = store.get_all_items()
+    items = databaseStore.get_all_items()
     
     if not show_deleted:
         items = [item for item in items if not item.info.deleted]
@@ -140,7 +142,7 @@ async def get_items(
 
 @itemRouter.put("/{item_id}")
 def update_item(item_id: int, request: PutItemRequest) -> ItemResponse:
-    item = store.put_item(item_id=item_id, request=request)
+    item = databaseStore.put_item(item_id=item_id, request=request)
     if item is None:
          raise HTTPException(status_code=404, detail="Item not found")
     return ItemResponse.from_entity(item)
@@ -161,15 +163,15 @@ def update_item(item_id: int, request: PutItemRequest) -> ItemResponse:
     }
 )
 async def patch_item(item_id: int, info: PatchItemRequest):
-    entity = store.patch_item(item_id, info.as_patch_item_info())
+    entity = databaseStore.patch_item(item_id, info.as_patch_item_info())
     
     if isinstance(entity, ItemEntity):
         return ItemResponse.from_entity(entity)
     else:
         match entity:
-            case store.PatchResult.NotFound:
+            case databaseStore.PatchResult.NotFound:
                 raise HTTPException(status_code=404, detail="Item not found")
-            case store.PatchResult.NotModified:
+            case databaseStore.PatchResult.NotModified:
                 return Response(status_code=304)
             case _:
                 raise HTTPException(status_code=422, detail="Incorrect price")
@@ -177,5 +179,5 @@ async def patch_item(item_id: int, info: PatchItemRequest):
 
 @itemRouter.delete("/{item_id}")
 async def delete_item(item_id: int):
-    store.delete_item(item_id)
+    databaseStore.delete_item(item_id)
     return {"message": "Item deleted"}
