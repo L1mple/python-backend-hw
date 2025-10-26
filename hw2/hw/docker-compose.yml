@@ -1,6 +1,23 @@
-version: "3"
-
 services:
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: shop_user
+      POSTGRES_PASSWORD: shop_password
+      POSTGRES_DB: shop_db
+    ports:
+      - 5432:5432
+    networks:
+      - monitoring
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   shop-api:
     build:
@@ -12,6 +29,11 @@ services:
       - 8080:8080
     networks:
       - monitoring
+    environment:
+      DATABASE_URL: postgresql+asyncpg://shop_user:shop_password@postgres:5432/shop_db
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   grafana:
     image: grafana/grafana:latest
@@ -42,3 +64,6 @@ services:
 networks:
   monitoring:
     driver: bridge
+
+volumes:
+  postgres_data:
