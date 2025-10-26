@@ -1,0 +1,3 @@
+fastapi>=0.117.1
+uvicorn
+prometheus-fastapi-instrumentator
