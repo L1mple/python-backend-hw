@@ -1,0 +1,21 @@
+[project]
+name = "fastapi-template"
+version = "0.1.0"
+description = ""
+authors = [{ name = "Nikita Aspaev", email = "asspaev@yandex.ru" }]
+readme = "README.md"
+requires-python = ">=3.14,<4.0"
+dependencies = [
+    "fastapi (>=0.120.0,<0.121.0)",
+    "uvicorn (>=0.38.0,<0.39.0)",
+    "pydantic (>=2.12.3,<3.0.0)",
+    "pydantic-settings (>=2.11.0,<3.0.0)",
+    "loguru (>=0.7.3,<0.8.0)",
+    "motor (>=3.7.1,<4.0.0)"
+]
+
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
