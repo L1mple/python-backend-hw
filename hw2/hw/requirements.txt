@@ -11,4 +11,5 @@ Faker>=37.8.0
 prometheus-fastapi-instrumentator
 sqlalchemy
 psycopg2
-
+pytest-cov
+polyfactory

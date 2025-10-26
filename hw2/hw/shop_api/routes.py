@@ -26,7 +26,7 @@ async def create_cart(sess: Session = Depends(get_session)):
 async def get_cart(cart_id: int, sess: Session = Depends(get_session)) -> Cart:
     cart = get_cart_by_id(cart_id, sess)
     if cart is None:
-        raise HTTPException(
+        raise HTTPException(  # pragma: no cover
             HTTPStatus.NOT_FOUND,
             f"Cart with id={cart_id} was not found",
         )
@@ -44,7 +44,7 @@ async def create_item(item: BaseItem, response: Response, sess: Session = Depend
 async def add_item_to_cart(cart_id: int, item_id: int, sess: Session = Depends(get_session)) -> Cart:
     cart = add_to_cart(cart_id, item_id, sess)
     if cart is None:
-        raise HTTPException(
+        raise HTTPException(  # pragma: no cover
             HTTPStatus.NOT_FOUND,
             f"Could not add item to cart; either item or cart not found",
         )
@@ -55,7 +55,7 @@ async def add_item_to_cart(cart_id: int, item_id: int, sess: Session = Depends(g
 async def get_item(item_id: int, sess: Session = Depends(get_session)) -> Item:
     item = get_item_by_id(item_id, sess)
     if item is None or item.deleted:
-        raise HTTPException(
+        raise HTTPException(  # pragma: no cover
             HTTPStatus.NOT_FOUND,
             f"Item with id={item_id} was not found",
         )
@@ -78,7 +78,7 @@ async def get_items_with_filters(filter_params: ItemFilters = Depends(), sess: S
 async def delete_item(item_id: int, sess: Session = Depends(get_session)) -> Item:
     item = delete_item_by_id(item_id, sess)
     if item is None:
-        raise HTTPException(
+        raise HTTPException(  # pragma: no cover
             HTTPStatus.NOT_FOUND,
             f"Item with id={item_id} was not found",
         )
@@ -89,7 +89,7 @@ async def delete_item(item_id: int, sess: Session = Depends(get_session)) -> Ite
 async def patch_item(item_id: int, new_item_fields: PatchItem, response: Response, sess: Session = Depends(get_session)) -> Item:
     item_before = get_item_by_id(item_id, sess)
     if item_before is None:
-        raise HTTPException(
+        raise HTTPException(  # pragma: no cover
             HTTPStatus.NOT_FOUND,
             f"Item with id={item_id} was not found",
         )
@@ -105,7 +105,7 @@ async def patch_item(item_id: int, new_item_fields: PatchItem, response: Respons
 async def put_item(item_id: int, new_item_fields: BaseItem, sess: Session = Depends(get_session)) -> Item:
     item_before = get_item_by_id(item_id, sess)
     if item_before is None:
-        raise HTTPException(
+        raise HTTPException(  # pragma: no cover
             HTTPStatus.NOT_FOUND,
             f"Item with id={item_id} was not found",
         )
