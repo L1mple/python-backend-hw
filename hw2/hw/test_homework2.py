@@ -282,3 +282,144 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+
+def test_get_nonexistent_item() -> None:
+    response = client.get("/item/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_nonexistent_cart() -> None:
+    response = client.get("/cart/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_item_to_nonexistent_cart(existing_item: dict[str, Any]) -> None:
+    item_id = existing_item["id"]
+    response = client.post(f"/cart/999999/add/{item_id}")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_nonexistent_item_to_cart(existing_empty_cart_id: int) -> None:
+    response = client.post(f"/cart/{existing_empty_cart_id}/add/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_update_nonexistent_item() -> None:
+    response = client.put("/item/999999", json={"name": "test", "price": 10.0})
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_patch_nonexistent_item() -> None:
+    response = client.patch("/item/999999", json={"name": "test"})
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_cart_with_deleted_items(existing_empty_cart_id: int, existing_item: dict[str, Any]) -> None:
+    item_id = existing_item["id"]
+
+    # Add item to cart
+    client.post(f"/cart/{existing_empty_cart_id}/add/{item_id}")
+
+    # Get cart - should have the item
+    response = client.get(f"/cart/{existing_empty_cart_id}")
+    assert response.status_code == HTTPStatus.OK
+    cart_data = response.json()
+    assert len(cart_data["items"]) == 1
+    assert cart_data["items"][0]["available"] is True
+    original_price = cart_data["price"]
+    assert original_price > 0
+
+    # Delete the item
+    client.delete(f"/item/{item_id}")
+
+    # Get cart again - item should be marked as unavailable
+    response = client.get(f"/cart/{existing_empty_cart_id}")
+    assert response.status_code == HTTPStatus.OK
+    cart_data = response.json()
+    assert len(cart_data["items"]) == 1
+    assert cart_data["items"][0]["available"] is False
+    # Price should be 0 because item is deleted
+    assert cart_data["price"] == 0.0
+
+
+def test_get_items_show_deleted(existing_item: dict[str, Any]) -> None:
+    item_id = existing_item["id"]
+
+    # Delete the item
+    client.delete(f"/item/{item_id}")
+
+    # Should not appear without show_deleted
+    response = client.get("/item", params={"show_deleted": False, "limit": 100})
+    assert response.status_code == HTTPStatus.OK
+    items = response.json()
+    assert not any(item["id"] == item_id for item in items)
+
+    # Should appear with show_deleted=True
+    response = client.get("/item", params={"show_deleted": True, "limit": 100})
+    assert response.status_code == HTTPStatus.OK
+    items = response.json()
+    assert any(item["id"] == item_id and item["deleted"] is True for item in items)
+
+
+# WebSocket tests
+import asyncio
+from fastapi.testclient import TestClient as SyncTestClient
+
+
+def test_websocket_chat():
+    """Test WebSocket chat functionality"""
+    with SyncTestClient(app) as test_client:
+        # Connect first client to chat room "test_room"
+        with test_client.websocket_connect("/chat/test_room") as websocket1:
+            # First message from server should be broadcasted
+
+            # Connect second client to the same chat room
+            with test_client.websocket_connect("/chat/test_room") as websocket2:
+                # Send message from first client
+                websocket1.send_text("Hello from client 1")
+
+                # Both clients should receive the message
+                msg1 = websocket1.receive_text()
+                msg2 = websocket2.receive_text()
+
+                # Check that messages are formatted correctly (username :: message)
+                assert " :: Hello from client 1" in msg1
+                assert " :: Hello from client 1" in msg2
+
+                # Check that the username is present
+                assert msg1 == msg2  # Both should receive same message
+                username1 = msg1.split(" :: ")[0]
+                assert len(username1) == 8  # Username should be 8 characters
+
+                # Send message from second client
+                websocket2.send_text("Hello from client 2")
+
+                # Both clients should receive the message
+                msg1 = websocket2.receive_text()
+                msg2 = websocket1.receive_text()
+
+                assert " :: Hello from client 2" in msg1
+                assert " :: Hello from client 2" in msg2
+
+
+def test_websocket_separate_rooms():
+    """Test that messages are only sent to clients in the same room"""
+    with SyncTestClient(app) as test_client:
+        # Connect to room1
+        with test_client.websocket_connect("/chat/room1") as websocket1:
+            # Connect to room2
+            with test_client.websocket_connect("/chat/room2") as websocket2:
+                # Send message in room1
+                websocket1.send_text("Message in room1")
+
+                # Only room1 should receive it
+                msg1 = websocket1.receive_text()
+                assert " :: Message in room1" in msg1
+
+                # Send message in room2
+                websocket2.send_text("Message in room2")
+
+                # Only room2 should receive it
+                msg2 = websocket2.receive_text()
+                assert " :: Message in room2" in msg2
