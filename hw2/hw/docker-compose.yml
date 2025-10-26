@@ -12,6 +12,9 @@ services:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/shop_db
     depends_on:
       - db
+    volumes:
+      - .:/src
+      
   db:
     image: postgres:16
     restart: always
