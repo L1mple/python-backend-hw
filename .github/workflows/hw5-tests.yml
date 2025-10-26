@@ -52,4 +52,4 @@ jobs:
         DATABASE_URL: postgresql://shop_user:shop_password@localhost:5432/shop_db
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
       run: |
-        pytest tests/test_shop_api.py --cov=shop_api --cov-report=term -v
+        pytest test_homework2.py --cov=shop_api --cov-report=term -v

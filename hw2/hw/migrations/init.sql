@@ -15,8 +15,7 @@ CREATE TABLE carts (
 
 CREATE TABLE cart_items (
     id SERIAL PRIMARY KEY,
-    cart_id INTEGER NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
-    item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
-    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
-    UNIQUE(cart_id, item_id)
+    cart_id INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0)
 );

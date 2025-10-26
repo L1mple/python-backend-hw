@@ -6,7 +6,7 @@ import pytest
 from faker import Faker
 from fastapi.testclient import TestClient
 
-from shop_api.main import app
+from hw2.hw.shop_api.main import app
 
 client = TestClient(app)
 faker = Faker()
@@ -15,6 +15,10 @@ faker = Faker()
 @pytest.fixture()
 def existing_empty_cart_id() -> int:
     return client.post("/cart").json()["id"]
+
+@pytest.fixture()
+def non_existing_cart_id() -> int:
+    return -1
 
 
 @pytest.fixture(scope="session")
@@ -84,6 +88,20 @@ def test_post_cart() -> None:
 
 
 @pytest.mark.parametrize(
+    ("cart", "status_code"),
+    [
+        ("existing_empty_cart_id", HTTPStatus.OK),
+        ("non_existing_cart_id", HTTPStatus.NOT_FOUND),
+    ],
+)
+def test_get_cart_status_code(request, cart: int, status_code: HTTPStatus) -> None:
+    cart_id = request.getfixturevalue(cart)
+
+    response = client.get(f"/cart/{cart_id}")
+
+    assert response.status_code == status_code
+        
+@pytest.mark.parametrize(
     ("cart", "not_empty"),
     [
         ("existing_empty_cart_id", False),
@@ -111,7 +129,6 @@ def test_get_cart(request, cart: int, not_empty: bool) -> None:
         assert response_json["price"] == pytest.approx(price, 1e-8)
     else:
         assert response_json["price"] == 0.0
-
 
 @pytest.mark.parametrize(
     ("query", "status_code"),
@@ -174,6 +191,12 @@ def test_get_item(existing_item: dict[str, Any]) -> None:
 
     assert response.status_code == HTTPStatus.OK
     assert response.json() == existing_item
+    
+def test_get_non_existing_item() -> None:
+    item_id = -1
+    
+    response = client.get(f"/item/{item_id}")
+    assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.parametrize(
