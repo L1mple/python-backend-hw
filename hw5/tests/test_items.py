@@ -88,26 +88,25 @@ def test_put_item_fail(client):
 
 
 def test_patch_item(client):
-    res_create = client.post("/item", json={"name": "item1", "price": 1.0})
-    res = client.patch(f"/item/{res_create}", json={"price": 2.0})
+    client.post("/item", json={"name": "item1", "price": 1.0})
+    res = client.patch(f"/item/1", json={"price": 2.0})
     assert res.status_code == 200
     assert res.json()["price"] == 2.0
 
 
 def test_patch_item_fail(client):
-    res_create = client.post("/item", json={"name": "item1", "price": 1.0})
-    next_id = res_create + 1
-    res = client.patch(f"/item/{next_id}", json={"price": 2.0})
+    client.post("/item", json={"name": "item1", "price": 1.0})
+    res = client.patch(f"/item/2", json={"price": 2.0})
     assert res.status_code == 404
 
-    client.delete(f"/item/{res_create}")
-    res = client.patch(f"/item/{res_create}", json={"price": 2.0})
+    client.delete(f"/item/1")
+    res = client.patch(f"/item/1", json={"price": 2.0})
     assert res.status_code == 304
 
 
 def test_delete_item(client):
-    res_create = client.post("/item", json={"name": "item1", "price": 1.0})
-    res = client.delete(f"/item/{res_create}")
+    client.post("/item", json={"name": "item1", "price": 1.0})
+    res = client.delete(f"/item/1")
     assert res.status_code == 200
-    res2 = client.get(f"/item/{res_create}")
+    res2 = client.get(f"/item/1")
     assert res2.status_code == 404
