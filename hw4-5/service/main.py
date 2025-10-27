@@ -16,22 +16,21 @@ app = FastAPI(title="Shop API")
 # === Доменные модели (без привязки к БД) ===
 @dataclass
 class Item:
-    id: Optional[int] = None
+    id: int = 1
     name: str = ""
     price: float = 0.0
     deleted: bool = False
 
 @dataclass
 class ItemInCart:
-    id: Optional[int] = None
-    item_id: int = 0
+    id: int = 1
     name: str = ""
     quantity: int = 0
     available: bool = True
 
 @dataclass
 class Cart:
-    id: Optional[int] = None
+    id: int = 1
     items: List[ItemInCart] = field(default_factory=list)
     price: float = 0.0
 
@@ -112,14 +111,14 @@ class ItemInCartMapper:
     @staticmethod
     def to_domain(orm_item: ItemInCartOrm) -> ItemInCart:
         """Преобразование ORM модели в доменную"""
-        return ItemInCart(id=orm_item.item_id, item_id=orm_item.item_id, name=orm_item.name, quantity=orm_item.quantity, available=orm_item.available)
+        return ItemInCart(id=orm_item.item_id, name=orm_item.name, quantity=orm_item.quantity, available=orm_item.available)
 
     @staticmethod
     def to_orm(domain_item: ItemInCart, orm_item: Optional[ItemInCartOrm] = None) -> ItemInCartOrm:
         """Преобразование доменной модели в ORM"""
         if orm_item is None:
             orm_item = ItemInCartOrm()
-        orm_item.item_id = domain_item.item_id
+        orm_item.item_id = domain_item.id
         orm_item.name = domain_item.name
         orm_item.quantity = domain_item.quantity
         orm_item.available = domain_item.available

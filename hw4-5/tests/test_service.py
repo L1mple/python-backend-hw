@@ -334,7 +334,7 @@ class TestCartRepository:
         orm_cart_item = MagicMock(spec=ItemInCartOrm)
         mocker.patch('service.main.ItemInCartOrm', return_value=orm_cart_item)
 
-        mocker.patch('service.main.CartMapper.to_domain', return_value=Cart(id=1, items=[ItemInCart(id=None, item_id=1, name="Apple", quantity=1, available=True)], price=150.0))
+        mocker.patch('service.main.CartMapper.to_domain', return_value=Cart(id=1, items=[ItemInCart(id=1, name="Apple", quantity=1, available=True)], price=150.0))
 
         def flush_side_effect():
             orm_cart.configure_mock(price=150.0)
@@ -347,7 +347,7 @@ class TestCartRepository:
         assert result.id == 1
         assert result.price == 150.0
         assert len(result.items) == 1
-        assert result.items[0].item_id == 1
+        assert result.items[0].id == 1
         assert result.items[0].name == "Apple"
         assert result.items[0].quantity == 1
         assert result.items[0].available is True
@@ -370,7 +370,7 @@ class TestCartRepository:
 
         mock_session.query.return_value.filter_by.return_value.first.side_effect = [orm_cart, orm_item]
 
-        mocker.patch('service.main.CartMapper.to_domain', return_value=Cart(id=1, items=[ItemInCart(id=None, item_id=1, name="Apple", quantity=2, available=True)], price=300.0))
+        mocker.patch('service.main.CartMapper.to_domain', return_value=Cart(id=1, items=[ItemInCart(id=1, name="Apple", quantity=2, available=True)], price=300.0))
 
         def flush_side_effect():
             orm_cart.configure_mock(price=300.0)
@@ -383,7 +383,7 @@ class TestCartRepository:
         assert result.id == 1
         assert result.price == 300.0
         assert len(result.items) == 1
-        assert result.items[0].item_id == 1
+        assert result.items[0].id == 1
         assert result.items[0].name == "Apple"
         assert result.items[0].quantity == 2
         assert result.items[0].available is True
@@ -475,7 +475,7 @@ class TestMappers:
         orm_cart.price = 150.0
         orm_cart.items = [orm_item]
 
-        domain_item = ItemInCart(id=1, item_id=2, name="Apple", quantity=3, available=True)
+        domain_item = ItemInCart(id=2, name="Apple", quantity=3, available=True)
         mocker.patch('service.main.ItemInCartMapper.to_domain', return_value=domain_item)
 
         result = CartMapper.to_domain(orm_cart)
@@ -512,13 +512,12 @@ class TestMappers:
 
         assert isinstance(result, ItemInCart)
         assert result.id == 2
-        assert result.item_id == 2
         assert result.name == "Apple"
         assert result.quantity == 3
         assert result.available is True
 
     def test_item_in_cart_mapper_to_orm_new(self):
-        domain_item_in_cart = ItemInCart(id=None, item_id=2, name="Apple", quantity=3, available=True)
+        domain_item_in_cart = ItemInCart(id=2, name="Apple", quantity=3, available=True)
 
         result = ItemInCartMapper.to_orm(domain_item_in_cart)
 
@@ -558,7 +557,7 @@ class TestCartAPI:
         assert response.headers["location"] == "/cart/1"
 
     def test_list_carts_default(self, client, mocker):
-        mock_cart = Cart(id=1, items=[ItemInCart(id=1, item_id=1, name="Apple", quantity=1, available=True)], price=150.0)
+        mock_cart = Cart(id=1, items=[ItemInCart(id=1, name="Apple", quantity=1, available=True)], price=150.0)
         mocker.patch('service.main.SqlAlchemyCartRepository.get_all', return_value=[mock_cart])
 
         response = client.get("/cart?offset=0&limit=10")
@@ -660,7 +659,7 @@ class TestItemAPI:
         assert response.status_code == HTTPStatus.OK
 
     def test_add_item_to_cart(self, client, mocker):
-        mock_cart = Cart(id=1, items=[ItemInCart(id=1, item_id=1, name="Apple", quantity=1, available=True)], price=150.0)
+        mock_cart = Cart(id=1, items=[ItemInCart(id=1, name="Apple", quantity=1, available=True)], price=150.0)
         mocker.patch('service.main.SqlAlchemyCartRepository.add_item', return_value=mock_cart)
 
         response = client.post("/cart/1/add/1")
