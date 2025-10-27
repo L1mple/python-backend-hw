@@ -112,8 +112,8 @@ class ItemInCartMapper:
     @staticmethod
     def to_domain(orm_item: ItemInCartOrm) -> ItemInCart:
         """Преобразование ORM модели в доменную"""
-        return ItemInCart(id=orm_item.id, item_id=orm_item.item_id, name=orm_item.name, quantity=orm_item.quantity, available=orm_item.available)
-    
+        return ItemInCart(id=orm_item.item_id, item_id=orm_item.item_id, name=orm_item.name, quantity=orm_item.quantity, available=orm_item.available)
+
     @staticmethod
     def to_orm(domain_item: ItemInCart, orm_item: Optional[ItemInCartOrm] = None) -> ItemInCartOrm:
         """Преобразование доменной модели в ORM"""

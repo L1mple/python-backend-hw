@@ -511,7 +511,7 @@ class TestMappers:
         result = ItemInCartMapper.to_domain(orm_item_in_cart)
 
         assert isinstance(result, ItemInCart)
-        assert result.id == 1
+        assert result.id == 2
         assert result.item_id == 2
         assert result.name == "Apple"
         assert result.quantity == 3

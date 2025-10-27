@@ -13,7 +13,7 @@ RUN python -m pip install --upgrade pip
 WORKDIR /app/src
 COPY ./service ./service
 COPY ./requirements.txt ./
-COPY ./tests/test_service.py ./tests/test_service.py
+COPY ./tests ./tests
 
 ENV VIRTUAL_ENV=/app/src/.venv \
     PATH=/app/src/.venv/bin:$PATH

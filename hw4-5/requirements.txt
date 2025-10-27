@@ -8,3 +8,4 @@ pytest-mock
 pytest
 pytest-asyncio
 httpx
+Faker

@@ -64,7 +64,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/hw4-5
           DATABASE_URL: postgresql+psycopg2://postgres:password@localhost:5432/shop_db
         run: |
-          coverage run --source=service -m pytest tests/test_service.py -v
+          coverage run --source=service -m pytest tests -v
           coverage xml
           coverage report --fail-under=95
         continue-on-error: false
