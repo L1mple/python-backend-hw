@@ -5,7 +5,6 @@ from typing import List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.exc import IntegrityError
 from prometheus_fastapi_instrumentator import Instrumentator
 import os
 
@@ -59,11 +58,20 @@ class Cart(BaseModel):
     price: float = 0.0
 
 
-app = FastAPI(title="Shop API")
-Instrumentator().instrument(app).expose(app)
+fastapi_app = FastAPI(title="Shop API")
+Instrumentator().instrument(fastapi_app).expose(fastapi_app)
+
+from starlette.applications import Starlette
+from starlette.routing import Mount
+
+app = Starlette(
+    routes=[
+        Mount("/", app=fastapi_app)
+    ]
+)
 
 
-@app.on_event("startup")
+@fastapi_app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
 
@@ -76,7 +84,7 @@ def get_db():
         db.close()
 
 
-@app.post("/item", response_model=Item, status_code=201)
+@fastapi_app.post("/item", response_model=Item, status_code=201)
 def create_item(item: ItemCreate, db: Session = Depends(get_db)):
     db_item = ItemDB(name=item.name, price=item.price)
     db.add(db_item)
@@ -85,7 +93,7 @@ def create_item(item: ItemCreate, db: Session = Depends(get_db)):
     return Item(id=db_item.id, **item.dict(), deleted=False)
 
 
-@app.get("/item/{id}", response_model=Item)
+@fastapi_app.get("/item/{id}", response_model=Item)
 def get_item(id: int, db: Session = Depends(get_db)):
     item = db.get(ItemDB, id)
     if not item or item.deleted:
@@ -93,27 +101,27 @@ def get_item(id: int, db: Session = Depends(get_db)):
     return Item.from_orm(item)
 
 
-@app.get("/item")
+@fastapi_app.get("/item")
 def list_items(
         offset: int = Query(0, ge=0),
         limit: int = Query(10, ge=1),
-        min_price: Optional[float] = Query(None, ge=0),
-        max_price: Optional[float] = Query(None, ge=0),
+        min_prices: Optional[float] = Query(None, ge=0),
+        max_prices: Optional[float] = Query(None, ge=0),
         show_deleted: bool = False,
         db: Session = Depends(get_db)
 ):
     query = db.query(ItemDB)
     if not show_deleted:
         query = query.filter(ItemDB.deleted == False)
-    if min_price is not None:
-        query = query.filter(ItemDB.price >= min_price)
-    if max_price is not None:
-        query = query.filter(ItemDB.price <= max_price)
+    if min_prices is not None:
+        query = query.filter(ItemDB.price >= min_prices)
+    if max_prices is not None:
+        query = query.filter(ItemDB.price <= max_prices)
     items = query.offset(offset).limit(limit).all()
     return [Item.from_orm(i) for i in items]
 
 
-@app.put("/item/{id}", response_model=Item)
+@fastapi_app.put("/item/{id}", response_model=Item)
 def update_item(id: int, item: ItemCreate, db: Session = Depends(get_db)):
     db_item = db.get(ItemDB, id)
     if not db_item:
@@ -125,7 +133,7 @@ def update_item(id: int, item: ItemCreate, db: Session = Depends(get_db)):
     return Item.from_orm(db_item)
 
 
-@app.patch("/item/{id}", response_model=Item)
+@fastapi_app.patch("/item/{id}", response_model=Item)
 def partial_update_item(id: int, item: dict, db: Session = Depends(get_db)):
     db_item = db.get(ItemDB, id)
     if not db_item:
@@ -140,7 +148,7 @@ def partial_update_item(id: int, item: dict, db: Session = Depends(get_db)):
     return Item.from_orm(db_item)
 
 
-@app.delete("/item/{id}")
+@fastapi_app.delete("/item/{id}")
 def delete_item(id: int, db: Session = Depends(get_db)):
     db_item = db.get(ItemDB, id)
     if not db_item:
@@ -150,7 +158,7 @@ def delete_item(id: int, db: Session = Depends(get_db)):
     return {"status": "success"}
 
 
-@app.post("/cart", status_code=201)
+@fastapi_app.post("/cart", status_code=201)
 def create_cart(db: Session = Depends(get_db)):
     cart = CartDB()
     db.add(cart)
@@ -162,12 +170,11 @@ def create_cart(db: Session = Depends(get_db)):
     )
 
 
-@app.get("/cart/{id}", response_model=Cart)
+@fastapi_app.get("/cart/{id}", response_model=Cart)
 def get_cart(id: int, db: Session = Depends(get_db)):
     cart = db.get(CartDB, id)
     if not cart:
         raise HTTPException(404, "Cart not found")
-
     items = db.query(CartItemDB).filter(CartItemDB.cart_id == id).all()
     total = 0.0
     cart_items = []
@@ -185,7 +192,7 @@ def get_cart(id: int, db: Session = Depends(get_db)):
     return Cart(id=cart.id, items=cart_items, price=total)
 
 
-@app.get("/cart")
+@fastapi_app.get("/cart")
 def list_carts(
         offset: int = Query(0, ge=0),
         limit: int = Query(10, ge=1),
@@ -211,13 +218,12 @@ def list_carts(
     return result
 
 
-@app.post("/cart/{cart_id}/add/{item_id}")
+@fastapi_app.post("/cart/{cart_id}/add/{item_id}")
 def add_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_db)):
     cart = db.get(CartDB, cart_id)
     item = db.get(ItemDB, item_id)
     if not cart or not item:
         raise HTTPException(404, "Not found")
-
     ci = db.query(CartItemDB).filter_by(cart_id=cart_id, item_id=item_id).first()
     if ci:
         ci.quantity += 1
