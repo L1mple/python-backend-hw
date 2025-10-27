@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, text
@@ -155,7 +156,6 @@ def create_cart(db: Session = Depends(get_db)):
     db.add(cart)
     db.commit()
     db.refresh(cart)
-    from fastapi.responses import JSONResponse
     return JSONResponse(
         content={"id": cart.id},
         headers={"Location": f"/cart/{cart.id}"}
