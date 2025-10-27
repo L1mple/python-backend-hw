@@ -1,0 +1,59 @@
+name: "HW4 Tests"
+
+# Запускаем тесты при изменении файлов в hw2/hw/
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ 'hw2/hw/**' ]
+  push:
+    branches: [ main ]
+    paths: [ 'hw2/hw/**' ]
+
+jobs:
+  test-hw4:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      working-directory: hw2/hw
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run all tests with coverage (HW4)
+      working-directory: hw2/hw
+      env:
+        PYTHONPATH: ${{ github.workspace }}/hw2/hw
+      run: |
+        pytest --cov=shop_api --cov-report=term-missing --cov-report=xml --cov-fail-under=95 test_homework2.py test_edge_cases.py test_websocket.py -v
+
+    - name: Upload coverage to Codecov
+      if: matrix.python-version == '3.11'
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./hw2/hw/coverage.xml
+        fail_ci_if_error: false
+
+    - name: Run transaction isolation demos
+      if: matrix.python-version == '3.11'
+      working-directory: hw2/hw
+      run: |
+        echo "Running transaction isolation demonstrations..."
+        python transaction_demos/01_dirty_read_demo.py
+        python transaction_demos/02_no_dirty_read_demo.py
+        python transaction_demos/03_non_repeatable_read_demo.py
+        python transaction_demos/04_no_non_repeatable_read_demo.py
+        python transaction_demos/05_phantom_read_demo.py
+        python transaction_demos/06_no_phantom_read_demo.py
+        echo "All transaction demos completed successfully!"
