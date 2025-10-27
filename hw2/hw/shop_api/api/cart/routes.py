@@ -66,6 +66,12 @@ async def get_cart_list(
 async def post_item_to_cart(cart_id: int, item_id: int, response: Response) -> CartResponse:
     entity = store.add_item_to_cart(cart_id, item_id)
 
+    if not entity:
+        raise HTTPException(
+            HTTPStatus.NOT_FOUND,
+            f"Request resource /{cart_id}/cart/{item_id} was not found",
+        )
+
     # as REST states one should provide uri to newly created resource in location header
     response.headers["location"] = f"/cart/{entity.id}"
 

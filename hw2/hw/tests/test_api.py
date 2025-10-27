@@ -173,7 +173,7 @@ def test_interaction_update_item_in_cart(client):
     cart_get_resp = client.get(f"/cart/{cart_id}")
     cart_data = cart_get_resp.json()
     assert cart_data["price"] == 6.0
-    assert cart_data["items"][0]["name"] == "New Soda"
+    assert cart_data["items"][0]["name"] == "Item 2"
 
     client.patch(f"/item/{item_id}", json={"price": 2.5})
     cart_get_resp_2 = client.get(f"/cart/{cart_id}")

@@ -7,6 +7,7 @@ _data_items = dict[int, ItemInfo]()
 _data_carts = dict[int, CartInfo]()
 
 
+
 def int_id_generator() -> Iterable[int]:
     i = 0
     while True:
@@ -51,7 +52,7 @@ def get_many_items(offset: int = 0,
                    show_deleted: bool = False) -> Iterable[ItemEntity]:
     curr = 0
     for id, info in _data_items.items():
-        if offset <= curr < curr + limit \
+        if offset <= curr < offset + limit \
                 and min_price <= info.price <= max_price \
                 and (not info.deleted or show_deleted):
             yield ItemEntity(id, info)
