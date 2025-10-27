@@ -1,0 +1,11 @@
+fastapi>=0.117.1
+pydantic>=2.0.0
+uvicorn>=0.24.0
+sqlalchemy>=2.0.25
+psycopg2-binary>=2.9.9
+pytest-cov
+pytest-mock
+pytest
+pytest-asyncio
+httpx
+Faker

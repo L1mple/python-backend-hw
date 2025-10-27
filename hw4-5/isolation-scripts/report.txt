@@ -1,0 +1,71 @@
+Starting all isolation level tests...
+
+Cleared item with id=1
+Created item with id=1 and price=150.0
+
+===== DIRTY READ TEST =====
+
+=== Test with Read Committed ===
+(Read Uncommitted is not supported in Postgres where default isolation level is Read Committed)
+Transaction 1: Starting
+Transaction 1: Item found, it's price = 150.0
+Transaction 1: Changed price to 200 (not committed)
+Transaction 2: Starting
+Transaction 2: Read price = 150.0
+Transaction 1: Rolling back
+
+Cleared item with id=1
+Created item with id=1 and price=150.0
+
+===== NON-REPEATABLE READ TEST =====
+
+=== Test with Read Committed (should show non-repeatable read) ===
+Transaction 1: Starting with READ COMMITTED
+Transaction 1: First read, price = 150.0
+Transaction 2: Starting
+Transaction 2: Changed price to 200 and committed
+Transaction 1: Second read, price = 200.0
+
+Reset price to 150.0
+
+=== Test with Repeatable Read (should not show non-repeatable read) ===
+Transaction 1: Starting with REPEATABLE READ
+Transaction 1: First read, price = 150.0
+Transaction 2: Starting
+Transaction 2: Changed price to 200 and committed
+Transaction 1: Second read, price = 150.0
+
+Cleared items with id=1 and id=2
+Created item with id=1 and price=150.0
+
+===== PHANTOM READ TEST =====
+
+=== Test with Read Committed (should show phantom read) ===
+Transaction 1: Starting with READ COMMITTED
+Transaction 1: First read, items = [1]
+Transaction 2: Starting
+Transaction 2: Added item with id=2 and price=200
+Transaction 1: Second read, items = [1, 2]
+
+Cleared items with id=1 and id=2
+Created item with id=1 and price=150.0
+
+=== Test with Repeatable Read (should show phantom read) ===
+(But Postgres realizes snapshot isolation which eliminated phantom read in most cases)
+Transaction 1: Starting with REPEATABLE READ
+Transaction 1: First read, items = [1]
+Transaction 2: Starting
+Transaction 2: Added item with id=2 and price=200
+Transaction 1: Second read, items = [1]
+
+Cleared items with id=1 and id=2
+Created item with id=1 and price=150.0
+
+=== Test with Serializable (should not show phantom read) ===
+Transaction 1: Starting with SERIALIZABLE
+Transaction 1: First read, items = [1]
+Transaction 2: Starting
+Transaction 2: Added item with id=2 and price=200
+Transaction 1: Second read, items = [1]
+
+All tests completed.

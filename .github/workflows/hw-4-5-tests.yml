@@ -1,0 +1,76 @@
+name: "HW4-5 Tests"
+
+# Запускаем тесты при изменении файлов в hw4-5/**
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ 'hw4-5/**' ]
+  push:
+    branches: [ main, hw-5 ]
+    paths: [ 'hw4-5/**' ]
+
+jobs:
+  test-hw4-5:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: shop_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpq-dev
+
+      - name: Install Python dependencies
+        working-directory: hw4-5
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Run tests with coverage
+        working-directory: hw4-5
+        env:
+          PYTHONPATH: ${{ github.workspace }}/hw4-5
+          DATABASE_URL: postgresql+psycopg2://postgres:password@localhost:5432/shop_db
+        run: |
+          coverage run --source=service -m pytest tests -v
+          coverage xml
+          coverage report --fail-under=95
+        continue-on-error: false
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.python-version }}
+          path: hw4-5/coverage.xml
