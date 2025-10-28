@@ -1,9 +1,10 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, confloat, conint, PositiveInt
 from typing import Dict, List, Optional
 
 app = FastAPI()
+
 
 # ---------- MODELS ----------
 
@@ -11,8 +12,7 @@ class ItemBase(BaseModel):
     name: str
     price: confloat(ge=0.0)
 
-    class Config:
-        extra = 'forbid'  # запрет лишних полей во всех моделях
+    model_config = {'extra': 'forbid'}
 
 
 class ItemCreate(ItemBase):
@@ -23,8 +23,7 @@ class ItemPatch(BaseModel):
     name: Optional[str] = None
     price: Optional[confloat(ge=0.0)] = None
 
-    class Config:
-        extra = 'forbid'  # PATCH должен возвращать 422 при любых неожиданных полях
+    model_config = {'extra': 'forbid'}
 
 
 class Item(ItemBase):
@@ -108,7 +107,7 @@ def patch_item(id: int, patch: ItemPatch):
     if item.deleted:
         return JSONResponse(status_code=304, content=item.model_dump())
 
-    data = patch.dict(exclude_unset=True)
+    data = patch.model_dump(exclude_unset=True)
     if not data:
         return item
 
@@ -146,9 +145,7 @@ def create_cart():
 
 @app.post('/cart/{cart_id}/add/{item_id}')
 def add_item_to_cart(cart_id: int, item_id: int):
-    if cart_id not in _carts:
-        raise HTTPException(status_code=404)
-    if item_id not in _items:
+    if cart_id not in _carts or item_id not in _items:
         raise HTTPException(status_code=404)
 
     item_map = _carts[cart_id]

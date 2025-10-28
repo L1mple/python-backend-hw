@@ -2,8 +2,10 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, confloat, conint, PositiveInt
 from typing import Dict, List, Optional
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI()
+Instrumentator().instrument(app).expose(app)
 
 # ---------- MODELS ----------
 
