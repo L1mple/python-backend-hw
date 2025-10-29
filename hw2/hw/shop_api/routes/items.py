@@ -66,11 +66,10 @@ def patch_item(item_id: int, item_patch: ItemPatch):
         raise HTTPException(status_code=304, detail="Item is deleted")
     
     patch_data = item_patch.model_dump(exclude_unset=True)
-    for field, value in patch_data.items():
-        if value is not None:
-            item[field] = value
-    
-    return ItemResponse(**item)
+    # Persist only provided fields
+    storage.update_item(item_id, patch_data)
+    updated = storage.get_item_by_id(item_id)
+    return ItemResponse(**updated)
 
 
 @router.delete("/{item_id}", status_code=200)
