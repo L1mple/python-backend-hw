@@ -1,34 +1,33 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  postgres:
-    image: postgres:15
-    container_name: hw4_postgres
+  db:
+    image: postgres:16
+    container_name: shop-pg
     environment:
-      POSTGRES_DB: hw4_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - POSTGRES_USER=shop
+      - POSTGRES_PASSWORD=shop
+      - POSTGRES_DB=shop
+    ports: ["5432:5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U shop -d shop"]
       interval: 5s
-      timeout: 5s
-      retries: 5
-
-  edgedb:
-    image: edgedb/edgedb:5
-    container_name: hw4_edgedb
-    environment:
-      EDGEDB_SERVER_SECURITY: insecure_dev_mode
-    ports:
-      - "5656:5656"
+      timeout: 3s
+      retries: 50
     volumes:
-      - edgedb_data:/var/lib/edgedb/data
+      - pg-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql+psycopg://shop:shop@db:5432/shop
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ["8000:8000"]
 
 volumes:
-  postgres_data:
-  edgedb_data:
+  pg-data:
