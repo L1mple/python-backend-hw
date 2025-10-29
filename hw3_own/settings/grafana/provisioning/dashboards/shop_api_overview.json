@@ -1,0 +1,66 @@
+{
+    "title": "Shop API — Overview",
+    "schemaVersion": 39,
+    "version": 1,
+    "time": { "from": "now-1h", "to": "now" },
+    "panels": [
+        {
+            "type": "timeseries",
+            "title": "RPS (requests/sec)",
+            "targets": [
+                {
+                    "expr": "sum(rate(http_requests_total[1m]))",
+                    "legendFormat": "rps"
+                }
+            ],
+            "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+        },
+        {
+            "type": "timeseries",
+            "title": "Error rate (%)",
+            "targets": [
+                {
+                    "expr": "100 * (sum(rate(http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 1e-9))",
+                    "legendFormat": "5xx %"
+                }
+            ],
+            "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+        },
+        {
+            "type": "timeseries",
+            "title": "Latency p95 (seconds)",
+            "description": "Если лейбл пути называется не 'handler', замените на 'path' в expr.",
+            "targets": [
+                {
+                    "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+                    "legendFormat": "p95"
+                }
+            ],
+            "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+        },
+        {
+            "type": "stat",
+            "title": "In-progress requests",
+            "targets": [
+                {
+                    "expr": "sum(http_requests_in_progress)",
+                    "legendFormat": "inflight"
+                }
+            ],
+            "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 }
+        },
+        {
+            "type": "bargauge",
+            "title": "Requests by status (5m rate)",
+            "options": { "displayMode": "gradient" },
+            "targets": [
+                {
+                    "expr": "sum by (status) (rate(http_requests_total[5m]))",
+                    "legendFormat": "{{status}}"
+                }
+            ],
+            "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 }
+        }
+    ],
+    "panelsState": {}
+}

@@ -1,0 +1,13 @@
+services:
+  server:
+    build:
+      context: .
+    restart: always
+    volumes:
+      - .:/api
+      - ./data:/api/data
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////api/data/shop.db
+    working_dir: /api
+    ports:
+      - 8080:8080
