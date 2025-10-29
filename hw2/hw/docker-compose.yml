@@ -10,7 +10,10 @@ services:
     restart: always
     ports:
       - 8080:8080
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://shop_user:shop_password@postgres:5432/shop_db
     depends_on:
+      - postgres
       - prometheus
       - grafana
 
@@ -31,4 +34,16 @@ services:
       - "--web.console.templates=/usr/share/prometheus/consoles"
     ports:
       - 9090:9090
+    restart: always
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=shop_db
+      - POSTGRES_USER=shop_user
+      - POSTGRES_PASSWORD=shop_password
+    ports:
+      - 5432:5432
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
     restart: always
