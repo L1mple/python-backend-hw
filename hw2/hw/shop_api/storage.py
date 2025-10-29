@@ -25,6 +25,7 @@ class Storage:
             "DATABASE_URL",
             "postgresql+psycopg2://shop_user:shop_password@localhost:5432/shop_db",
         )
+        print(f"Database URL: {database_url}")
         self.engine: Engine = create_engine(database_url, future=True)
         self.metadata = MetaData()
 

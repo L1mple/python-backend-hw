@@ -50,7 +50,7 @@ jobs:
     - name: Run tests
       working-directory: hw2/hw
       env:
-        DATABASE_URL: postgresql+psycopg2://shop_user:shop_password@postgres:5432/shop_db
+        DATABASE_URL: postgresql+psycopg2://shop_user:shop_password@localhost:5432/shop_db
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
       run: |
         pytest test_homework2.py -v
