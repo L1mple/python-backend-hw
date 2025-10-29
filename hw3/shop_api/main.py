@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Response, status
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
-
+from prometheus_fastapi_instrumentator import Instrumentator
 # Наша pydantic модель для Item
 class Item(BaseModel):
     id: int
@@ -28,6 +28,7 @@ items_db = {}
 
 # Инициализация FastAPI приложения
 app = FastAPI(title="Cart API", version="1.0.0")
+Instrumentator().instrument(app).expose(app)
 
 class ItemCreateUpdate(BaseModel):
     name: str
