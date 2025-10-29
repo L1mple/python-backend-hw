@@ -53,5 +53,4 @@ jobs:
         DATABASE_URL: postgresql+psycopg2://shop_user:shop_password@localhost:5432/shop_db
         PYTHONPATH: ${{ github.workspace }}/hw2/hw
       run: |
-        cd hw2/hw
         pytest test_homework2.py test_additional_api.py --cov=shop_api --cov-report=term --cov-fail-under=95 -v
