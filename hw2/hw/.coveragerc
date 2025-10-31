@@ -1,0 +1,21 @@
+[run]
+source = shop_api
+omit =
+    */migrations/*
+    */tests/*
+    */conftest.py
+    */__pycache__/*
+    venv/*
+    .venv/*
+    */transaction_scripts/*
+    */not_pytests/*
+    */old_*.py
+    */alembic/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:

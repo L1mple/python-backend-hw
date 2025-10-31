@@ -1,0 +1,57 @@
+version: "1"
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: shop_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d shop_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  shop:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: local
+    restart: always
+    ports:
+      - 8080:8080
+    environment:
+      DATABASE_URL: postgresql+asyncpg://admin:admin@postgres:5432/shop_db
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 3000:3000
+    restart: always
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./settings/prometheus/:/etc/prometheus/
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    ports:
+      - 9090:9090
+    restart: always
+
+volumes:
+  postgres_data:
+    driver: local

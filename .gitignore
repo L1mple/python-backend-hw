@@ -132,3 +132,7 @@ dmypy.json
 
 # macOS
 .DS_Store
+
+# Custom
+explain.md
+test_analysis.md
