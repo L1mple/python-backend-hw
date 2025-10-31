@@ -3,14 +3,17 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from pydantic import BaseModel, Field, confloat
+from prometheus_fastapi_instrumentator import Instrumentator
 
 app = FastAPI(title="Shop API")
+
+Instrumentator().instrument(app).expose(app)
+
 
 db_items: Dict[int, Dict[str, Any]] = {}
 db_carts: Dict[int, Dict[int, int]] = {}
 item_id_counter = 0
 cart_id_counter = 0
-
 
 
 class BaseItem(BaseModel):
@@ -20,12 +23,14 @@ class BaseItem(BaseModel):
 class Item(BaseItem):
     id: int
     deleted: bool = False
+
 class ItemUpdate(BaseItem):
     pass
+
 class PartialItemUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1)
     price: Optional[confloat(gt=0.0)] = None
-    
+
     class Config:
         extra = "forbid"
 
@@ -82,7 +87,6 @@ def calculate_cart_details(cart_items_dict: Dict[int, int]) -> (List[CartItem], 
     return items_list, total_price
 
 
-
 @app.post("/item", response_model=Item, status_code=HTTPStatus.CREATED)
 async def create_item(item: BaseItem):
     global item_id_counter
@@ -126,7 +130,6 @@ async def get_item_list(
 async def update_item(item_id: int, item_update: ItemUpdate):
     """Полное обновление товара по ID."""
     db_item = get_item_or_404(item_id)
-
     db_item.update(item_update.dict())
     return db_item
 
@@ -134,15 +137,12 @@ async def update_item(item_id: int, item_update: ItemUpdate):
 @app.patch("/item/{item_id}", response_model=Item)
 async def partially_update_item(item_id: int, item_update: PartialItemUpdate, response: Response):
     db_item = get_item_or_404(item_id, include_deleted=True)
-
     if db_item["deleted"]:
         response.status_code = HTTPStatus.NOT_MODIFIED
         return db_item
-
     update_data = item_update.dict(exclude_unset=True)
     if not update_data:
-        return db_item  # Тест требует 200 OK, если тело пустое
-
+        return db_item
     db_item.update(update_data)
     return db_item
 
@@ -152,7 +152,6 @@ async def delete_item(item_id: int):
     db_item = get_item_or_404(item_id, include_deleted=True)
     db_item["deleted"] = True
     return db_item
-
 
 
 @app.post("/cart", response_model=CartCreated, status_code=HTTPStatus.CREATED)
@@ -184,7 +183,6 @@ async def get_cart_list(
     for cart_id, cart_items_dict in db_carts.items():
         items_list, total_price = calculate_cart_details(cart_items_dict)
         total_quantity = sum(item.quantity for item in items_list)
-
         if min_price is not None and total_price < min_price:
             continue
         if max_price is not None and total_price > max_price:
@@ -193,20 +191,14 @@ async def get_cart_list(
             continue
         if max_quantity is not None and total_quantity > max_quantity:
             continue
-
         filtered_carts.append(Cart(id=cart_id, items=items_list, price=total_price))
-        
     return filtered_carts[offset : offset + limit]
 
 
 @app.post("/cart/{cart_id}/add/{item_id}", response_model=Cart)
 async def add_item_to_cart(cart_id: int, item_id: int):
     cart = get_cart_or_404(cart_id)
-    _ = get_item_or_404(item_id)  # Проверяем, что товар существует и не удален
-
+    _ = get_item_or_404(item_id)
     cart[item_id] = cart.get(item_id, 0) + 1
-
     items_list, total_price = calculate_cart_details(cart)
-
     return Cart(id=cart_id, items=items_list, price=total_price)
-
