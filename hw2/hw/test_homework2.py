@@ -37,7 +37,8 @@ def existing_not_empty_carts(existing_items: list[int]) -> list[int]:
     for i in range(20):
         cart_id: int = client.post("/cart").json()["id"]
         for item_id in faker.random_elements(existing_items, unique=False, length=i):
-            client.post(f"/cart/{cart_id}/add/{item_id}")
+            response = client.post(f"/cart/{cart_id}/add/{item_id}")
+            assert response.status_code == HTTPStatus.OK
 
         carts.append(cart_id)
 
@@ -75,6 +76,11 @@ def deleted_item(existing_item: dict[str, Any]) -> dict[str, Any]:
     return existing_item
 
 
+@pytest.fixture()
+def non_existing_item() -> dict[str, Any]:
+    return {"id": 100500, "name": "non existing", "price": 0, "deleted": False}
+
+
 def test_post_cart() -> None:
     response = client.post("/cart")
 
@@ -106,11 +112,18 @@ def test_get_cart(request, cart: int, not_empty: bool) -> None:
 
         for item in response_json["items"]:
             item_id = item["id"]
-            price += client.get(f"/item/{item_id}").json()["price"] * item["quantity"]
+            response = client.get(f"/item/{item_id}")
+            assert response.status_code == HTTPStatus.OK
+            price += response.json()["price"] * item["quantity"]
 
         assert response_json["price"] == pytest.approx(price, 1e-8)
     else:
         assert response_json["price"] == 0.0
+
+
+def test_non_existing_get_cart() -> None:
+    response = client.get(f"/cart/100500")
+    assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.parametrize(
@@ -154,6 +167,28 @@ def test_get_cart_list(query: dict[str, Any], status_code: int):
 
         if "max_quantity" in query:
             assert quantity <= query["max_quantity"]
+
+
+@pytest.mark.parametrize(
+    ("use_existing_cart", "use_existing_item", "status_code"),
+    [
+        (True, True, HTTPStatus.OK),
+        (False, True, HTTPStatus.NOT_FOUND),
+        (True, False, HTTPStatus.NOT_FOUND),
+    ],
+)
+def test_add_item_to_cart(
+    existing_empty_cart_id: int,
+    existing_item: dict[str, Any],
+    use_existing_cart: bool,
+    use_existing_item: bool,
+    status_code: int
+):
+    cart_id = existing_empty_cart_id if use_existing_cart else 100500
+    item_id = existing_item["id"] if use_existing_item else 100500
+    response = client.post(f"/cart/{cart_id}/add/{item_id}")
+    
+    assert response.status_code == status_code
 
 
 def test_post_item() -> None:
@@ -211,19 +246,22 @@ def test_get_item_list(query: dict[str, Any], status_code: int) -> None:
 
 
 @pytest.mark.parametrize(
-    ("body", "status_code"),
+    ("item", "body", "status_code"),
     [
-        ({}, HTTPStatus.UNPROCESSABLE_ENTITY),
-        ({"price": 9.99}, HTTPStatus.UNPROCESSABLE_ENTITY),
-        ({"name": "new name", "price": 9.99}, HTTPStatus.OK),
+        ("existing_item", {}, HTTPStatus.UNPROCESSABLE_ENTITY),
+        ("existing_item", {"price": 9.99}, HTTPStatus.UNPROCESSABLE_ENTITY),
+        ("existing_item", {"name": "new name", "price": 9.99}, HTTPStatus.OK),
+        ("non_existing_item", {"name": "new name", "price": 9.99}, HTTPStatus.NOT_FOUND),
     ],
 )
 def test_put_item(
-    existing_item: dict[str, Any],
+    request,
+    existing_item,
+    item,
     body: dict[str, Any],
     status_code: int,
 ) -> None:
-    item_id = existing_item["id"]
+    item_id = request.getfixturevalue(item)["id"]
     response = client.put(f"/item/{item_id}", json=body)
 
     assert response.status_code == status_code
@@ -253,6 +291,7 @@ def test_put_item(
             {"name": "new name", "price": 9.99, "deleted": True},
             HTTPStatus.UNPROCESSABLE_ENTITY,
         ),
+        ("non_existing_item", {"name": "new name", "price": 9.99}, HTTPStatus.NOT_FOUND),
     ],
 )
 def test_patch_item(request, item: str, body: dict[str, Any], status_code: int) -> None:
