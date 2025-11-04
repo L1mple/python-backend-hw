@@ -282,3 +282,39 @@ def test_delete_item(existing_item: dict[str, Any]) -> None:
 
     response = client.delete(f"/item/{item_id}")
     assert response.status_code == HTTPStatus.OK
+
+
+def test_put_item_not_found() -> None:
+    response = client.put("/item/999999", json={"name": "Test", "price": 100.0})
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_put_deleted_item(existing_item: dict) -> None:
+    client.delete(f"/item/{existing_item['id']}")
+    response = client.put(f"/item/{existing_item['id']}", json={"name": "New", "price": 200.0})
+    assert response.status_code == HTTPStatus.NOT_MODIFIED
+
+
+def test_patch_item_not_found() -> None:
+    response = client.patch("/item/999999", json={"name": "Test"})
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_delete_item_not_found() -> None:
+    response = client.delete("/item/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_get_cart_not_found() -> None:
+    response = client.get("/cart/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_item_to_nonexistent_cart(existing_items: list[int]) -> None:
+    response = client.post(f"/cart/999999/add/{existing_items[0]}")
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_add_nonexistent_item_to_cart(existing_empty_cart_id: int) -> None:
+    response = client.post(f"/cart/{existing_empty_cart_id}/add/999999")
+    assert response.status_code == HTTPStatus.NOT_FOUND
