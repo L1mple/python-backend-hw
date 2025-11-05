@@ -417,4 +417,3 @@ def test_contracts_and_models():
     cart_resp = CartResponse.from_entity(cart_entity)
     assert cart_resp.id == 1
     assert len(cart_resp.items) == 1
-
