@@ -1,0 +1,21 @@
+{
+  "id": null,
+  "title": "Shop API - Basic",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "HTTP requests rate",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[1m])",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 9 }
+    }
+  ],
+  "schemaVersion": 27,
+  "version": 1
+}
+
