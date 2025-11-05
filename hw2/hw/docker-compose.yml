@@ -4,6 +4,22 @@ services:
     build: ./shop_api
     ports:
       - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://shop_user:shop_pass@postgres:5432/shop_db
+      - ASYNCPG_DATABASE_URL=postgresql://shop_user:shop_pass@postgres:5432/shop_db
+    depends_on:
+      - postgres
+    restart: unless-stopped
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=shop_db
+      - POSTGRES_USER=shop_user
+      - POSTGRES_PASSWORD=shop_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
   prometheus:
     image: prom/prometheus:latest
@@ -25,3 +41,6 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+
+volumes:
+  postgres_data:

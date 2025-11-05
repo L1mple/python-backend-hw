@@ -8,22 +8,22 @@ router = APIRouter(prefix="/cart", tags=["carts"])
 
 
 @router.post("/", response_model=dict, status_code=HTTPStatus.CREATED)
-def create_cart(response: Response):
-    cart_id = CartStorage.create()
+async def create_cart(response: Response):
+    cart_id = await CartStorage.create()
     response.headers["location"] = f"/cart/{cart_id}"
     return {"id": cart_id}
 
 
 @router.get("/{cart_id}", response_model=Cart)
-def get_cart(cart_id: int):
-    cart = CartStorage.get(cart_id)
+async def get_cart(cart_id: int):
+    cart = await CartStorage.get(cart_id)
     if not cart:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Cart not found")
     return cart
 
 
 @router.get("/", response_model=List[Cart])
-def get_carts(
+async def get_carts(
         offset: int = Query(0, ge=0),
         limit: int = Query(10, gt=0),
         min_price: Optional[float] = Query(None, ge=0),
@@ -31,7 +31,7 @@ def get_carts(
         min_quantity: Optional[int] = Query(None, ge=0),
         max_quantity: Optional[int] = Query(None, ge=0)
 ):
-    carts = CartStorage.get_all()
+    carts = await CartStorage.get_all()
 
     # Apply filters
     filtered_carts = []
@@ -54,12 +54,12 @@ def get_carts(
 
 
 @router.post("/{cart_id}/add/{item_id}", response_model=Cart)
-def add_item_to_cart(cart_id: int, item_id: int):
-    cart = CartStorage.get(cart_id)
+async def add_item_to_cart(cart_id: int, item_id: int):
+    cart = await CartStorage.get(cart_id)
     if not cart:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Cart not found")
 
-    item = ItemStorage.get(item_id)
+    item = await ItemStorage.get(item_id)
     if not item:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Item not found")
 
@@ -82,8 +82,8 @@ def add_item_to_cart(cart_id: int, item_id: int):
     cart.price = sum(
         item.price * cart_item.quantity
         for cart_item in cart.items
-        if (item := ItemStorage.get(cart_item.id)) and not item.deleted
+        if (item := await ItemStorage.get(cart_item.id)) and not item.deleted
     )
 
-    CartStorage.update(cart)
+    await CartStorage.update(cart)
     return cart
