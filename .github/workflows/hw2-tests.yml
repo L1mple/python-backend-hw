@@ -4,10 +4,10 @@ name: "HW2 Tests"
 on:
   pull_request:
     branches: [ main ]
-    paths: [ 'hw1/**' ]
+    paths: [ 'hw2/hw/**' ]
   push:
     branches: [ main ]
-    paths: [ 'hw1/**' ]
+    paths: [ 'hw2/hw/**' ]
 
 jobs:
   test-hw2:
