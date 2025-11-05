@@ -1,0 +1,4 @@
+fastapi>=0.117.1
+uvicorn[standard]>=0.20.0
+prometheus_client>=0.16.0
+
