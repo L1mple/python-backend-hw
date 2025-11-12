@@ -1,12 +1,14 @@
 from fastapi import FastAPI, HTTPException, Query, Response
 from http import HTTPStatus
 from typing import Optional, Dict, Any
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from store import queries
 from store.models import Item, Cart
 
 app = FastAPI(title="Shop API")
 
+Instrumentator().instrument(app).expose(app)
 @app.post("/item", status_code=HTTPStatus.CREATED)
 def create_item(item: Item):
     created_item = queries.create_item(item.name, item.price)
