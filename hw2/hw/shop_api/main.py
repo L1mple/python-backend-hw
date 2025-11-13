@@ -1,136 +1,86 @@
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, Depends, HTTPException, Query, Response
 from http import HTTPStatus
-from typing import Optional, Dict, Any
+from sqlalchemy.orm import Session
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from store import queries
-from store.models import Item, Cart
+from store import models, queries, schemas
+from store.database import engine, SessionLocal
 
-app = FastAPI(title="Shop API")
+models.Base.metadata.create_all(bind=engine)
 
+app = FastAPI(title="Shop API with DB")
 Instrumentator().instrument(app).expose(app)
-@app.post("/item", status_code=HTTPStatus.CREATED)
-def create_item(item: Item):
-    created_item = queries.create_item(item.name, item.price)
-    if hasattr(created_item, "dict"):
-        created_item = created_item.model_dump()
-    elif not isinstance(created_item, dict):
-        created_item = vars(created_item)
 
-    if "id" not in created_item:
-        created_item["id"] = queries.get_last_item_id()
-        if not created_item["id"]:
-            created_item["id"] = len(queries.list_items())
-
-    created_item["deleted"] = created_item.get("deleted", False)
-
-    return created_item
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-@app.get("/item/{item_id}", status_code=HTTPStatus.OK)
-def get_item(item_id: int):
-    item = queries.get_item(item_id)
+@app.post("/item", response_model=schemas.Item, status_code=HTTPStatus.CREATED)
+def create_item(item: schemas.ItemCreate, db: Session = Depends(get_db)):
+    return queries.create_item(db, item.name, item.price)
+
+
+@app.get("/item/{item_id}", response_model=schemas.Item)
+def get_item(item_id: int, db: Session = Depends(get_db)):
+    item = queries.get_item(db, item_id)
     if not item or item.deleted:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Item not found")
     return item
 
 
-@app.get("/item", status_code=HTTPStatus.OK)
-def list_items(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(10, gt=0),
-    min_price: Optional[float] = Query(None, ge=0),
-    max_price: Optional[float] = Query(None, ge=0),
-    show_deleted: bool = False,
-):
-    items = queries.list_items()
-    if not show_deleted:
-        items = [i for i in items if not i.deleted]
-    if min_price is not None:
-        items = [i for i in items if i.price >= min_price]
-    if max_price is not None:
-        items = [i for i in items if i.price <= max_price]
-    return items[offset:offset + limit]
+@app.get("/item", response_model=list[schemas.Item])
+def list_items(db: Session = Depends(get_db)):
+    return queries.list_items(db)
 
 
-@app.put("/item/{item_id}")
-def replace_item(item_id: int, body: Dict[str, Any]):
-    if "name" not in body or "price" not in body:
-        raise HTTPException(status_code=HTTPStatus.UNPROCESSABLE_ENTITY)
-    item = queries.get_item(item_id)
-    if not item:
+@app.put("/item/{item_id}", response_model=schemas.Item)
+def replace_item(item_id: int, item: schemas.ItemBase, db: Session = Depends(get_db)):
+    updated = queries.update_item(db, item_id, item.name, item.price)
+    if not updated:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND)
-    updated = queries.replace_item(item_id, Item(id=item_id, **body))
     return updated
 
 
-@app.patch("/item/{item_id}")
-def patch_item(item_id: int, body: Dict[str, Any], response: Response):
-    item = queries.get_item(item_id)
-    if not item:
+@app.patch("/item/{item_id}", response_model=schemas.Item)
+def patch_item(item_id: int, data: dict, db: Session = Depends(get_db)):
+    updated = queries.patch_item(db, item_id, data)
+    if not updated:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND)
-
-    if item.deleted:
-        response.status_code = HTTPStatus.NOT_MODIFIED
-        return item
-
-    invalid_keys = [k for k in body if k not in {"name", "price"}]
-    if invalid_keys:
-        raise HTTPException(status_code=HTTPStatus.UNPROCESSABLE_ENTITY)
-
-    updated = queries.patch_item(item_id, body)
     return updated
 
 
-@app.delete("/item/{item_id}", status_code=HTTPStatus.OK)
-def delete_item(item_id: int):
-    deleted = queries.delete_item(item_id)
-    return {"status": "deleted" if deleted else "already deleted"}
+@app.delete("/item/{item_id}")
+def delete_item(item_id: int, db: Session = Depends(get_db)):
+    deleted = queries.delete_item(db, item_id)
+    return {"status": "deleted" if deleted else "not found"}
+
 
 @app.post("/cart", status_code=HTTPStatus.CREATED)
-def create_cart(response: Response):
-    cart = queries.create_cart()
-    response.headers["Location"] = f"/cart/{cart.id}"
+def create_cart(db: Session = Depends(get_db)):
+    cart = queries.create_cart(db)
     return {"id": cart.id}
 
 
-@app.get("/cart/{cart_id}", status_code=HTTPStatus.OK)
-def get_cart(cart_id: int):
-    cart = queries.get_cart(cart_id)
+@app.get("/cart/{cart_id}", response_model=schemas.Cart)
+def get_cart(cart_id: int, db: Session = Depends(get_db)):
+    cart = queries.get_cart(db, cart_id)
     if not cart:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Cart not found")
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND)
     return cart
 
 
-@app.get("/cart", status_code=HTTPStatus.OK)
-def list_carts(
-    offset: int = Query(0, ge=0),
-    limit: int = Query(10, gt=0),
-    min_price: Optional[float] = Query(None, ge=0),
-    max_price: Optional[float] = Query(None, ge=0),
-    min_quantity: Optional[int] = Query(None, ge=0),
-    max_quantity: Optional[int] = Query(None, ge=0),
-):
-    carts = queries.list_carts()
-
-    def total_quantity(cart):
-        return sum(i.quantity for i in cart.items)
-
-    if min_price is not None:
-        carts = [c for c in carts if c.price >= min_price]
-    if max_price is not None:
-        carts = [c for c in carts if c.price <= max_price]
-    if min_quantity is not None:
-        carts = [c for c in carts if total_quantity(c) >= min_quantity]
-    if max_quantity is not None:
-        carts = [c for c in carts if total_quantity(c) <= max_quantity]
-
-    return carts[offset:offset + limit]
+@app.get("/cart", response_model=list[schemas.Cart])
+def list_carts(db: Session = Depends(get_db)):
+    return queries.list_carts(db)
 
 
-@app.post("/cart/{cart_id}/add/{item_id}")
-def add_item_to_cart(cart_id: int, item_id: int):
-    cart = queries.add_to_cart(cart_id, item_id)
+@app.post("/cart/{cart_id}/add/{item_id}", response_model=schemas.Cart)
+def add_to_cart(cart_id: int, item_id: int, db: Session = Depends(get_db)):
+    cart = queries.add_to_cart(db, cart_id, item_id)
     if not cart:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND)
     return cart
