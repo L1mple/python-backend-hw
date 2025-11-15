@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.venv
+venv
+*.egg-info
+.git
+.gitignore
+README.md
+MONITORING.md
+CLAUDE.md
+chat.html
+ddoser.py

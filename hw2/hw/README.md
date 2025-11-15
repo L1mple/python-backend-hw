@@ -96,7 +96,7 @@
 Чтобы запустить тесты только для этого задания вызовите:
 
 ```sh
-pytest -vv --showlocals --strict ./hw2/test_homework_2_1.py
+pytest -vv --showlocals --strict ./hw2/hw/test_homework2.py
 ```
 
 Если получаете ошибку на подобии `No module named 'shop_api'`
@@ -121,3 +121,14 @@ export PYTHONPATH=${PWD}/hw2/hw
 начале в следующем виде: `{username} :: {message}`.
 
 Если делаете его, напишите, пожалуйста, прямо в PR-e об этом. Мне будет сильно проще это заметить<3
+
+### Тест чата
+
+Добавил в `requirements.txt`: `uvicorn[standard]`, без этого вебсокеты не работали.
+
+Чтобы потестить чат, запускаем:
+```
+uvicorn shop_api.main:app --reload
+```
+
+Затем открываем: ```chat.html``` из нескольких вкладок, коннектимся и наслаждаемся.
