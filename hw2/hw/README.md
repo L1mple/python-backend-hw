@@ -1,3 +1,23 @@
+## Мониторинг и Docker (ДЗ 3)
+
+- HTTP сервис доступен на `http://localhost:8001`, метрики Prometheus на `http://localhost:8001/metrics`.
+- gRPC сервис слушает порт `50051` внутри контейнера и проброшен наружу.
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000` (логин: `admin`, пароль по умолчанию `admin`).
+
+### Локальный запуск
+
+```bash
+docker compose up -d --build
+```
+
+После старта: Grafana → Dashboards → Shop API Overview
+
+### Скриншот Grafana
+
+![Grafana dashboard](./grafana_graph.png)
+
+
 # ДЗ
 
 ## Задание - REST API (3 балла)
@@ -121,3 +141,5 @@ export PYTHONPATH=${PWD}/hw2/hw
 начале в следующем виде: `{username} :: {message}`.
 
 Если делаете его, напишите, пожалуйста, прямо в PR-e об этом. Мне будет сильно проще это заметить<3
+
+
